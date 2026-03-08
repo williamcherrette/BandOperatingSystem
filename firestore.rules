@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /songs/{songId} {
+      allow read, write: if request.auth != null && request.auth.token.email in [
+        'william.cherrette@gmail.com',
+        'ryanf@schepersbrothers.com',
+        'bairjon.JB@gmail.com',
+        'Galmy177@gmail.com',
+        'kwebert80@gmail.com',
+        'martyschrauben@gmail.com',
+        'matt.overweg@springportschools.net'
+      ]
+     && request.time - request.auth.token.lastWriteTime > duration.value(30, "seconds");
+    }
+  }
+}

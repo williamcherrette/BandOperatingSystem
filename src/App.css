@@ -1,0 +1,397 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+/* General Styles */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #1e1e1e; /* Dark gray background */
+  color: #d4d4d4; /* Light gray text for readability */
+}
+
+.App-header {
+  background-color: #1e1e1e;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Centering often looks cooler for titles */
+}
+
+/* The Title Styling */
+.App-header h1, h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  /* The new font */
+  font-size: 3.5rem;
+  letter-spacing: 3px;
+  color: #0078d4;
+  /* Your Microsoft Blue */
+
+  /* High-quality dark grey outline (#333333) */
+  text-shadow:
+    -2px -2px 0 #333333,
+    2px -2px 0 #333333,
+    -2px 2px 0 #333333,
+    2px 2px 0 #333333,
+    4px 4px 5px rgba(0, 0, 0, 0.5);
+  /* Adds a little depth/drop shadow too */
+
+  margin: 0;
+  text-transform: uppercase;
+}
+
+h1, h2 {
+  font-family: 'Bebas Neue', sans-serif;
+    /* The new font */
+    font-size: 3.5rem;
+    letter-spacing: 3px;
+    color: #0078d4;
+    /* Your Microsoft Blue */
+      text-shadow:
+          -2px -2px 0 #333333,
+          2px -2px 0 #333333,
+          -2px 2px 0 #333333,
+          2px 2px 0 #333333,
+          4px 4px 5px rgba(0, 0, 0, 0.5);
+        /* Adds a little depth/drop shadow too */
+      
+        margin: 0;
+        text-transform: uppercase;
+}
+
+h2 {
+  margin-bottom: 20px;
+}
+
+/* Form Section */
+.song-form {
+  background-color: #252526; /* Dark form background */
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+  max-width: 400px;
+  /* Limit the form width */
+  margin: 0 auto;
+  /* Center the form horizontally */
+  display: flex;
+  flex-direction: column;
+  /* Stack form elements vertically */
+  gap: 20px;
+  /* Add spacing between form groups */
+}
+
+/* Form Group */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  /* Stack label and input vertically */
+}
+
+.form-group label {
+  margin-bottom: 5px;
+  /* Add spacing between label and input */
+  font-weight: bold;
+  /* Make labels bold */
+}
+
+.song-form input,
+.song-form select,
+.song-form button {
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #3a3a3a;
+  /* Dark gray border */
+  border-radius: 4px;
+}
+
+.song-form button {
+  background-color: #3a3a3a; /* Dark gray buttons */
+  color: #d4d4d4; /* Light gray text */
+  border: 1px solid #0078d4; /* Blue border */
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.song-form button:hover {
+  background-color: #005a9e; /* Darker blue on hover */
+}
+
+/* Multi-Column Dropdown */
+.multi-column-dropdown {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* Two columns */
+  gap: 5px;
+}
+
+.multi-column-dropdown option {
+  padding: 5px;
+}
+
+.song-form .form-row {
+  display: flex;
+  gap: 10px; /* Add spacing between fields */
+  margin-bottom: 10px; /* Add spacing between rows */
+}
+
+/* Adjust the width of the Select column */
+table th:nth-child(1),
+table td:nth-child(1) {
+  width: 5%;
+  text-align: center;
+}
+
+table th:nth-child(2),
+table td:nth-child(2) {
+  text-align: center;
+}
+
+table th:nth-child(3),
+table td:nth-child(3) {
+  text-align: center;
+}
+
+/* Adjust the width of the Key and Decade columns */
+table th:nth-child(4),
+table td:nth-child(4) {
+  width: 5%;
+  text-align: center;
+}
+
+table th:nth-child(5),
+table td:nth-child(5) {
+  width: 5%;
+  text-align: center;
+}
+
+.song-form button {
+  background-color: #3a3a3a; /* Dark gray buttons */
+  color: #d4d4d4; /* Light gray text */
+  border: 1px solid #0078d4; /* Blue border */
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.song-form button:hover {
+  background-color: #005a9e; /* Darker blue on hover */
+}
+
+/* React-Select Styles */
+.react-select-container {
+  flex: 1; /* Adjust width to fit the layout */
+}
+
+.react-select__control {
+  border: 1px solid #87cefa; /* Light Sky Blue */
+  border-radius: 4px;
+  padding: 2px;
+  font-size: 14px;
+}
+
+.react-select__menu {
+  z-index: 10; /* Ensure the dropdown appears above other elements */
+}
+
+.react-select__option--is-selected {
+  background-color: #1e90ff; /* Dodger Blue */
+  color: white;
+}
+
+.react-select__option--is-focused {
+  background-color: #87cefa; /* Light Sky Blue */
+}
+
+/* Song List Table */
+table {
+  width: 100%;/* Make the table take up the full width */
+  border-collapse: collapse; /* Remove gaps between table cells */
+  table-layout: fixed; /* Enable fixed column widths */
+}
+
+table th,
+table td {
+  border: 1px solid #3a3a3a;
+  padding: 10px;
+  text-align: left;
+}
+
+/* Selected Songs Section */
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+ul li {
+  background-color: #252526; /* Dark list item background */
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  /* Space between song details and buttons */
+  align-items: center;
+  /* Vertically align content */
+}
+
+.song-details {
+  flex: 1;
+  font-size: 16px;
+  font-weight: bold;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.song-buttons {
+  flex: 1;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: left;
+    display: flex;
+    justify-content: left;
+    align-items: left;
+}
+
+ul li span {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+ul li button {
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+  background-color: #1e90ff;
+  /* Dodger Blue */
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+ul li button:hover {
+  background-color: #4682b4;
+  /* Steel Blue */
+}
+
+/* Updated Song List Table Header */
+table th {
+  background-color: #0078d4;
+  /* Keep the Microsoft blue background */
+  color: white;
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  /* "Cooler" modern font */
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  /* Makes it look more like a professional UI */
+
+  /* Dark grey outline effect using text-shadow */
+  text-shadow:
+    -1px -1px 0 #1e1e1e,
+    1px -1px 0 #1e1e1e,
+    -1px 1px 0 #1e1e1e,
+    1px 1px 0 #1e1e1e;
+
+  border: 1px solid #3a3a3a;
+  padding: 12px 10px;
+  cursor: pointer;
+  /* Indicates headers are clickable for sorting */
+  transition: background-color 0.2s ease;
+}
+
+/* Updated Song List Table Header */
+table th {
+  background-color: #0078d4;
+  /* Keep the Microsoft blue background */
+  color: white;
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  /* "Cooler" modern font */
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  /* Makes it look more like a professional UI */
+
+  /* Dark grey outline effect using text-shadow */
+  text-shadow:
+    -1px -1px 0 #1e1e1e,
+    1px -1px 0 #1e1e1e,
+    -1px 1px 0 #1e1e1e,
+    1px 1px 0 #1e1e1e;
+
+  border: 1px solid #3a3a3a;
+  padding: 12px 10px;
+  cursor: pointer;
+  /* Indicates headers are clickable for sorting */
+  transition: background-color 0.2s ease;
+}
+
+table th:hover {
+  background-color: #005a9e;
+  /* Subtle darken on hover */
+}
+
+table tr:nth-child(even) {
+  background-color: #2d2d2d;
+}
+
+table tr:hover {
+  background-color: #333333;
+}
+
+table a {
+  color: #1e90ff; /* Dodger Blue */
+  text-decoration: none;
+}
+
+table a:hover {
+  text-decoration: underline;
+}
+
+/* Buttons */
+button {
+  background-color: #3a3a3a; /* Dark gray buttons */
+  color: #d4d4d4; /* Light gray text */
+  border: 1px solid #0078d4; /* Blue border */
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+button:hover {
+  background-color: #005a9e; /* Darker blue on hover */
+}
+
+button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Selected Songs Section */
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+ul li {
+  background-color: #252526; /* Dark list item background */
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+ul li button {
+  margin-left: 10px;
+}
+
+/* Increase font size for elements below the song list */
+main section + section {
+  font-size: 1.2rem; /* Slightly larger font size */
+}
