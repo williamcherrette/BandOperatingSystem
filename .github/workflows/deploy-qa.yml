@@ -40,4 +40,6 @@ jobs:
           firebase deploy --only hosting \
             --project ${{ secrets.QA_FIREBASE_PROJECT_ID }} \
             --token ${{ secrets.QA_FIREBASE_TOKEN }} \
-            --non-interactive
+            --non-interactive \
+            --site band-os-qa
+            

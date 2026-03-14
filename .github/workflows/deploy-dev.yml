@@ -38,4 +38,5 @@ jobs:
           firebase deploy --only hosting \
             --project ${{ secrets.DEV_FIREBASE_PROJECT_ID }} \
             --token ${{ secrets.DEV_FIREBASE_TOKEN }} \
-            --non-interactive
+            --non-interactive \
+            --site band-os-dev
