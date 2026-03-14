@@ -35,8 +35,10 @@ jobs:
 
       - name: Deploy to Firebase Hosting
         run: |
+          firebase target:apply hosting app ${{ secrets.DEV_FIREBASE_PROJECT_ID }} \
+            --project ${{ secrets.DEV_FIREBASE_PROJECT_ID }} \
+            --token ${{ secrets.DEV_FIREBASE_TOKEN }}
           firebase deploy --only hosting \
             --project ${{ secrets.DEV_FIREBASE_PROJECT_ID }} \
             --token ${{ secrets.DEV_FIREBASE_TOKEN }} \
-            --non-interactive \
-            --site band-os-dev
+            --non-interactive
