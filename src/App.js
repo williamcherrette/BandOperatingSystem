@@ -151,7 +151,7 @@ function BandOnboarding({ user, onComplete, onLogout }) {
 
 function App() {
   const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState(null);   // users/{uid} doc data
+  const [, setUserData] = useState(null);   // users/{uid} doc data
   const [tenantContext, setTenantContext] = useState(null);
   const [isResolvingTenant, setIsResolvingTenant] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
