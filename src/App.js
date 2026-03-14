@@ -1,13 +1,26 @@
 import { useEffect, useState } from "react";
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { db } from "./firebase"; // Import Firestore instance
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Import Firebase Storage functions
-import { storage } from "./firebase"; // Import Firebase Storage instance
-import { PDFDocument } from "pdf-lib"; // Import PDF-Lib
-import Select from "react-select"; // Import React-Select
-import { onAuthStateChanged, signOut } from "firebase/auth"; // Import Firebase Auth functions
-import { auth } from "./firebase"; // Import Firebase Auth instance
+import {
+  getDocs,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "./firebase";
+import { PDFDocument } from "pdf-lib";
+import Select from "react-select";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { auth } from "./firebase";
 import Login from "./login";
+import {
+  resolveTenantContext,
+  requireTenantBandContext,
+  tenantSongsCollectionRef,
+  tenantSongDocRef,
+  tenantStoragePath,
+} from "./tenantContext";
+import { createBandForUser, joinBandForUser } from "./bandMembershipService";
 import './App.css';
 
 const keyOptions = [
@@ -37,91 +50,250 @@ const keyOptions = [
   { value: "Bm", label: "Bm (Minor)" },
 ];
 
-function App() {
-  const [user, setUser] = useState(null); // Track the logged-in user
-  const [songs, setSongs] = useState([]);
-  const [selectedSongs, setSelectedSongs] = useState([]); // Track selected songs
-  const [newSong, setNewSong] = useState({
-    title: "",
-    key: "",
-    decade: "",
-    artist: "",
-    pdfUrl: "",
-  });
-  const [uploadedFileName, setUploadedFileName] = useState(""); // Track the uploaded file name
-  const [editingSongId, setEditingSongId] = useState(null); // Track the song being edited
-  const [error, setError] = useState(""); // Track validation or Firestore errors
-  const [searchTerm, setSearchTerm] = useState(""); // Track the search input
-  const [isLoading, setIsLoading] = useState(false); // Track loading state
-  const [isFormVisible, setIsFormVisible] = useState(false); // State to toggle form visibility
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" }); // Sorting configuration
+function BandOnboarding({ user, onComplete, onLogout }) {
+  const [mode, setMode] = useState("pick");
+  const [bandName, setBandName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-    // Monitor authentication state
+  const handleCreateBand = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!bandName.trim()) {
+      setError("Please enter a band name.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await createBandForUser({ uid: user.uid, bandName: bandName.trim() });
+
+      await onComplete();
+    } catch (err) {
+      console.error("Error creating band:", err);
+      setError(err?.message || "Failed to create band. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJoinBand = async (e) => {
+    e.preventDefault();
+    setError("");
+    const code = joinCode.trim().toUpperCase();
+    if (!code) {
+      setError("Please enter a band code.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await joinBandForUser({ uid: user.uid, bandId: code });
+
+      await onComplete();
+    } catch (err) {
+      console.error("Error joining band:", err);
+      setError(err?.message || "Failed to join band. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: "40px", textAlign: "center", fontFamily: "Georgia, serif" }}>
+      <h2>Set up your band</h2>
+      <p style={{ color: "#666" }}>Create a band or join one with an invite code.</p>
+      {error && <p style={{ color: "#c0392b" }}>{error}</p>}
+
+      {mode === "pick" && (
+        <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "16px" }}>
+          <button onClick={() => setMode("create")}>Create Band</button>
+          <button onClick={() => setMode("join")}>Join Band</button>
+          <button onClick={onLogout}>Logout</button>
+        </div>
+      )}
+
+      {mode === "create" && (
+        <form onSubmit={handleCreateBand} style={{ marginTop: "18px" }}>
+          <input
+            type="text"
+            value={bandName}
+            onChange={(e) => setBandName(e.target.value)}
+            placeholder="Band name"
+            style={{ padding: "10px", width: "280px" }}
+          />
+          <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "center" }}>
+            <button type="submit" disabled={loading}>{loading ? "Creating..." : "Create"}</button>
+            <button type="button" onClick={() => setMode("pick")}>Back</button>
+          </div>
+        </form>
+      )}
+
+      {mode === "join" && (
+        <form onSubmit={handleJoinBand} style={{ marginTop: "18px" }}>
+          <input
+            type="text"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            placeholder="Invite code"
+            style={{ padding: "10px", width: "280px", textTransform: "uppercase" }}
+          />
+          <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "center" }}>
+            <button type="submit" disabled={loading}>{loading ? "Joining..." : "Join"}</button>
+            <button type="button" onClick={() => setMode("pick")}>Back</button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);   // users/{uid} doc data
+  const [tenantContext, setTenantContext] = useState(null);
+  const [isResolvingTenant, setIsResolvingTenant] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [activeBandId, setActiveBandId] = useState(null);
+  const [activeBandName, setActiveBandName] = useState("");
+  const [userRole, setUserRole] = useState("member"); // "admin" | "member"
+
+  const [songs, setSongs] = useState([]);
+  const [selectedSongs, setSelectedSongs] = useState([]);
+  const [newSong, setNewSong] = useState({ title: "", key: "", decade: "", artist: "", pdfUrl: "" });
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const [editingSongId, setEditingSongId] = useState(null);
+  const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  const refreshTenantContext = async (currentUser, firestoreData = null) => {
+    const resolvedTenant = await resolveTenantContext(currentUser.uid, firestoreData || {});
+    setTenantContext(resolvedTenant);
+    setUserData(resolvedTenant.userData);
+    setActiveBandId(resolvedTenant.bandId);
+    setActiveBandName(resolvedTenant.bandName);
+    setUserRole(resolvedTenant.role);
+    return resolvedTenant;
+  };
+
+  // ── Auth state listener (handles page refresh) ────────────────────────────
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log("Auth state changed:", currentUser); // Debugging log
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setIsResolvingTenant(true);
+      if (!currentUser) {
+        setUser(null);
+        setUserData(null);
+        setTenantContext(null);
+        setActiveBandId(null);
+        setActiveBandName("");
+        setUserRole("member");
+        setIsResolvingTenant(false);
+        setAuthChecked(true);
+        return;
+      }
       setUser(currentUser);
+
+      try {
+        await refreshTenantContext(currentUser);
+      } catch (err) {
+        console.error("Error loading user context:", err);
+        setError("Could not load your band data. Please try logging in again.");
+      } finally {
+        setIsResolvingTenant(false);
+        setAuthChecked(true);
+      }
     });
     return () => unsubscribe();
   }, []);
-  
-    // Handle logout
-    const handleLogout = () => {
-      signOut(auth);
+
+  // ── onLogin callback passed to <Login> ───────────────────────────────────
+  // Called immediately after signup/login flow completes in login.js
+  const handleLoginComplete = async (firebaseUser, firestoreData) => {
+    setIsResolvingTenant(true);
+    setUser(firebaseUser);
+
+    try {
+      await refreshTenantContext(firebaseUser, firestoreData || {});
+      setAuthChecked(true);
+    } catch (err) {
+      console.error("Error finalizing login:", err);
+      setError("Login succeeded but band data could not be loaded.");
+    } finally {
+      setIsResolvingTenant(false);
+    }
+  };
+
+  // ── Fetch songs whenever activeBandId changes ─────────────────────────────
+  useEffect(() => {
+    if (!user || !tenantContext?.bandId) return;
+
+    const fetchSongs = async () => {
+      try {
+        const tenant = requireTenantBandContext(tenantContext);
+        const querySnapshot = await getDocs(tenantSongsCollectionRef(tenant));
+        const songsList = querySnapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            pdfUrl: data.pdfUrl || data.pdfPath || "",
+          };
+        });
+        const sorted = songsList.sort((a, b) =>
+          a.title.toLowerCase() < b.title.toLowerCase() ? -1 : 1
+        );
+        setSongs(sorted);
+      } catch (err) {
+        console.error("Error fetching songs:", err);
+        setError("Failed to fetch songs. Please try again.");
+      }
     };
 
-    useEffect(() => {
-      if (!user) {
-        console.error("User is not authenticated.");
-        return;
-      }
-      const fetchSongs = async () => {
-        try {
-          const querySnapshot = await getDocs(collection(db, "songs"));
-          const songsList = querySnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-  
-          // Sort songs by title (A-Z)
-          const sortedSongs = songsList.sort((a, b) => {
-            const aTitle = a.title.toLowerCase();
-            const bTitle = b.title.toLowerCase();
-            return aTitle < bTitle ? -1 : aTitle > bTitle ? 1 : 0;
-          });
-  
-          setSongs(sortedSongs); // Update the songs state
-        } catch (error) {
-          console.error("Error fetching songs:", error);
-          setError("Failed to fetch songs. Please try again.");
-        }
-      };
-  
-      fetchSongs();
-    }, [user]); // Only re-run when `user` changes
-  
-  
-    // If no user is logged in, show the Login component
-    if (!user) {
-      return <Login onLogin={(user) => setUser(user)} />;
-    }  
+    fetchSongs();
+  }, [user, tenantContext]);
 
+  // ── Logout ────────────────────────────────────────────────────────────────
+  const handleLogout = () => {
+    signOut(auth);
+    setSongs([]);
+    setSelectedSongs([]);
+    setTenantContext(null);
+    setActiveBandId(null);
+  };
+
+  // ── Copy invite code ──────────────────────────────────────────────────────
+  const handleCopyCode = () => {
+    if (!activeBandId) return;
+    navigator.clipboard.writeText(activeBandId);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  };
+
+  const isAuthed = !!user;
+  const hasTenantBand = !!activeBandId;
+  const isAppReady = authChecked && (!isAuthed || !isResolvingTenant);
+
+  // ── File upload (scoped to band) ──────────────────────────────────────────
   const handleFileUpload = async (file) => {
-    if (!file || file.type !== "application/pdf" || file.size > 5 * 1024 * 1024) { // 5MB limit
+    if (!file || file.type !== "application/pdf" || file.size > 5 * 1024 * 1024) {
       alert("Invalid file. Please upload a PDF smaller than 5MB.");
-      return;}
-  
+      return;
+    }
     try {
-      const storageRef = ref(storage, `pdfs/${file.name}`); // Create a reference in Firebase Storage
-      const snapshot = await uploadBytes(storageRef, file); // Upload the file
-      const downloadURL = await getDownloadURL(snapshot.ref); // Get the download URL
-  
-      // Remove the ".pdf" extension from the file name
+      const tenant = requireTenantBandContext(tenantContext);
+      const storageRef = ref(storage, tenantStoragePath(tenant, "pdfs", file.name));
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
       const cleanedFileName = file.name.replace(/\.pdf$/i, "");
-      setUploadedFileName(cleanedFileName); // Save the cleaned file name
-      setNewSong((prev) => ({ ...prev, pdfUrl: downloadURL })); // Save the download URL to the new song
-    } catch (error) {
-      console.error("Error uploading file:", error);
+      setUploadedFileName(cleanedFileName);
+      setNewSong((prev) => ({ ...prev, pdfUrl: downloadURL }));
+    } catch (err) {
+      console.error("Error uploading file:", err);
       alert("Failed to upload file. Please try again.");
     }
   };
@@ -131,8 +303,76 @@ function App() {
     setNewSong({ ...newSong, [name]: value });
   };
 
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value); // Update the search term
+  const extractStoragePathFromUrl = (url) => {
+    try {
+      if (!url) return "";
+      if (url.startsWith("gs://")) {
+        const firstSlash = url.indexOf("/", 5);
+        return firstSlash === -1 ? "" : decodeURIComponent(url.slice(firstSlash + 1));
+      }
+      const parsed = new URL(url);
+      const marker = "/o/";
+      const markerIndex = parsed.pathname.indexOf(marker);
+      if (markerIndex === -1) return "";
+      const encodedPath = parsed.pathname.slice(markerIndex + marker.length);
+      return decodeURIComponent(encodedPath);
+    } catch {
+      return "";
+    }
+  };
+
+  const resolveSongPdfUrl = async (song) => {
+    const existingUrl = song?.pdfUrl || song?.pdfPath || "";
+    if (!existingUrl) {
+      throw new Error(`Missing PDF URL for ${song?.title || "song"}`);
+    }
+
+    const currentBucket = storage.app.options.storageBucket || "";
+    if (existingUrl.includes(currentBucket) && existingUrl.includes("token=")) {
+      return existingUrl;
+    }
+
+    const storagePath = extractStoragePathFromUrl(existingUrl);
+    if (!storagePath) {
+      return existingUrl;
+    }
+
+    const fileName = storagePath.split("/").pop();
+    const candidatePaths = [storagePath];
+
+    if (fileName && activeBandId) {
+      candidatePaths.push(`bands/${activeBandId}/pdfs/${fileName}`);
+      candidatePaths.push(`bands/${activeBandId}/playlists/${fileName}`);
+      candidatePaths.push(`pdfs/${fileName}`);
+      candidatePaths.push(`playlists/${fileName}`);
+    }
+
+    let freshUrl = "";
+    for (const candidatePath of [...new Set(candidatePaths)]) {
+      try {
+        freshUrl = await getDownloadURL(ref(storage, candidatePath));
+        break;
+      } catch {}
+    }
+
+    if (!freshUrl) {
+      // If the file cannot be found in current storage paths, fall back to the
+      // saved URL so legacy/public links still get a chance to open.
+      return existingUrl;
+    }
+
+    if (freshUrl !== existingUrl && song?.id) {
+      try {
+        const tenant = requireTenantBandContext(tenantContext);
+        const songRef = tenantSongDocRef(tenant, song.id);
+        await updateDoc(songRef, { pdfUrl: freshUrl });
+        setSongs((prev) => prev.map((s) => (s.id === song.id ? { ...s, pdfUrl: freshUrl } : s)));
+      } catch (err) {
+        console.error("Could not persist refreshed PDF URL:", err);
+      }
+    }
+
+    return freshUrl;
   };
 
   const handleSelectSong = (id, isSelected) => {
@@ -143,133 +383,155 @@ function App() {
     }
   };
 
+  // ── Add / Update song ─────────────────────────────────────────────────────
   const handleAddOrUpdateSong = async (e) => {
     e.preventDefault();
-  
     if (!newSong.title || !newSong.key || !newSong.decade || !newSong.artist || !newSong.pdfUrl) {
       setError("All fields are required!");
       return;
     }
-  
     try {
+      const tenant = requireTenantBandContext(tenantContext);
       if (editingSongId) {
-        const songRef = doc(db, "songs", editingSongId);
-        await updateDoc(songRef, newSong); // Update the song in Firestore
+        const songRef = tenantSongDocRef(tenant, editingSongId);
+        await updateDoc(songRef, newSong);
         setSongs((prev) =>
-          prev.map((song) => (song.id === editingSongId ? { id: editingSongId, ...newSong } : song))
+          prev.map((s) => (s.id === editingSongId ? { id: editingSongId, ...newSong } : s))
         );
       } else {
-        const docRef = await addDoc(collection(db, "songs"), newSong); // Add a new song to Firestore
+        const docRef = await addDoc(tenantSongsCollectionRef(tenant), newSong);
         setSongs((prev) => [...prev, { id: docRef.id, ...newSong }]);
       }
-  
-      setNewSong({ title: "", key: "", decade: "", artist: "", pdfUrl: "" }); // Reset the form
+      setNewSong({ title: "", key: "", decade: "", artist: "", pdfUrl: "" });
+      setUploadedFileName("");
       setError("");
-      setEditingSongId(null); // Exit edit mode
-    } catch (error) {
-      console.error("Error saving song:", error);
+      setEditingSongId(null);
+      setIsFormVisible(false);
+    } catch (err) {
+      console.error("Error saving song:", err);
       setError("Failed to save the song. Please try again.");
     }
   };
 
   const handleEditSong = (song) => {
-    setNewSong(song); // Populate the form with the song's details
-  
-    // Extract the file name from the URL, decode it, and remove the ".pdf" extension
-    const fileName = decodeURIComponent(song.pdfUrl.split("/").pop().split("?")[0])
-    .replace(/^pdfs\//, "") // Remove the "pdfs/" prefix
-    .replace(/.pdf$/i, ""); // Remove the ".pdf" extension
-    setUploadedFileName(fileName); // Save the cleaned file name
-    setEditingSongId(song.id); // Set the editing song ID
-    setIsFormVisible(true); // Make the form visible
-  };
-  
-  const handleDeleteSong = async (id) => {
-    // List of users allowed to delete songs
-    const allowedEmails = ["william.cherrette@gmail.com"];
+    setNewSong({
+      title: song?.title || "",
+      key: song?.key || "",
+      decade: song?.decade || "",
+      artist: song?.artist || "",
+      pdfUrl: song?.pdfUrl || song?.pdfPath || "",
+    });
 
-    // Check if the logged-in user's email is in the allowed list
-    if (!user || !allowedEmails.includes(user.email)) {
-      alert("You do not have permission to delete songs.");
+    const storagePath = extractStoragePathFromUrl(song?.pdfUrl || song?.pdfPath || "");
+    const fileName = (storagePath.split("/").pop() || "")
+      .replace(/\.pdf$/i, "");
+
+    setUploadedFileName(fileName);
+    setEditingSongId(song.id);
+    setIsFormVisible(true);
+  };
+
+  // ── Delete song (admin only) ──────────────────────────────────────────────
+  const handleDeleteSong = async (id) => {
+    if (userRole !== "admin") {
+      alert("Only band admins can delete songs.");
       return;
     }
-
-    const confirmDelete = window.confirm("Are you sure you want to delete this song?");
-    if (!confirmDelete) {
-      return; // Exit if the user cancels
-    }
-
+    if (!window.confirm("Are you sure you want to delete this song?")) return;
     try {
-      await deleteDoc(doc(db, "songs", id)); // Delete the song from Firestore
-      setSongs(songs.filter((song) => song.id !== id)); // Update the UI
-    } catch (error) {
-      console.error("Error deleting song:", error);
+      const tenant = requireTenantBandContext(tenantContext);
+      await deleteDoc(tenantSongDocRef(tenant, id));
+      setSongs(songs.filter((s) => s.id !== id));
+    } catch (err) {
+      console.error("Error deleting song:", err);
       setError("Failed to delete the song. Please try again.");
     }
   };
+
+  // ── Merge & download playlist PDF ────────────────────────────────────────
   const mergePDFs = async () => {
-    console.log("Selected Songs:", selectedSongs); // Debugging
     if (selectedSongs.length === 0) {
       alert("Please select at least one song to create a playlist.");
       return;
     }
-  
-    setIsLoading(true); // Start loading
+    setIsLoading(true);
     try {
-      const mergedPdf = await PDFDocument.create(); // Create a new PDF document
-      console.log("Starting PDF merge...");
-  
+      const mergedPdf = await PDFDocument.create();
       for (const songId of selectedSongs) {
-        console.log(`Processing song ID: ${songId}`); // Debugging
-        const song = songs.find((s) => s.id === songId); // Find the song by ID
-      
-        if (!song) {
-          console.error(`Song not found for ID: ${songId}`);
-          continue; // Skip this iteration if the song is not found
-        }
-      
-        console.log(`Fetching PDF for song: ${song.title}, URL: ${song.pdfUrl}`);
-  
-        // Fetch the PDF file
-        const pdfBytes = await fetch(song.pdfUrl).then((res) => {
-          if (!res.ok) {
-            console.error(`Failed to fetch PDF for ${song.title}. Status: ${res.status}`);
-            throw new Error(`Failed to fetch PDF for ${song.title}`);
-          }
+        const song = songs.find((s) => s.id === songId);
+        if (!song) continue;
+        const resolvedUrl = await resolveSongPdfUrl(song);
+        const pdfBytes = await fetch(resolvedUrl).then((res) => {
+          if (!res.ok) throw new Error(`Failed to fetch PDF for ${song.title}`);
           return res.arrayBuffer();
         });
-  
-        // Load the PDF and copy its pages
         const pdf = await PDFDocument.load(pdfBytes);
-        console.log(`Loaded PDF for song: ${song.title}, Pages: ${pdf.getPageCount()}`);
-  
         const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-        copiedPages.forEach((page) => mergedPdf.addPage(page)); // Add pages to the merged PDF
-        console.log(`Added ${copiedPages.length} pages from ${song.title} to the merged PDF.`);
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
       }
-  
-      // Save the merged PDF
       const mergedPdfBytes = await mergedPdf.save();
-      console.log("Merged PDF created successfully.");
-  
       const blob = new Blob([mergedPdfBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
-  
-      // Create a temporary <a> element to trigger the download
       const a = document.createElement("a");
       a.href = url;
-      a.download = "Playlist.pdf"; // Set the desired file name
+      a.download = "Playlist.pdf";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-  
-      // Revoke the object URL to free up memory
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Error merging PDFs:", error);
+    } catch (err) {
+      console.error("Error merging PDFs:", err);
       alert("Failed to create the playlist. Please try again.");
     } finally {
-      setIsLoading(false); // Stop loading
+      setIsLoading(false);
+    }
+  };
+
+  // ── Save playlist to Firestore ────────────────────────────────────────────
+  const handleSavePlaylist = async () => {
+    if (selectedSongs.length === 0) {
+      alert("Please select at least one song to save the playlist.");
+      return;
+    }
+    const formattedDate = new Date().toISOString().split("T")[0];
+    try {
+      const tenant = requireTenantBandContext(tenantContext);
+      const mergedPdf = await PDFDocument.create();
+      for (const songId of selectedSongs) {
+        const song = songs.find((s) => s.id === songId);
+        if (!song) continue;
+        const resolvedUrl = await resolveSongPdfUrl(song);
+        const pdfBytes = await fetch(resolvedUrl).then((res) => {
+          if (!res.ok) throw new Error(`Failed to fetch PDF for ${song.title}`);
+          return res.arrayBuffer();
+        });
+        const pdf = await PDFDocument.load(pdfBytes);
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+      }
+      const mergedPdfBytes = await mergedPdf.save();
+      const blob = new Blob([mergedPdfBytes], { type: "application/pdf" });
+
+      const storageRef = ref(
+        storage,
+        tenantStoragePath(tenant, "playlists", `Playlist-${formattedDate}.pdf`)
+      );
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      const newPlaylist = {
+        title: `Playlist - ${formattedDate}`,
+        artist: activeBandName || "Band",
+        key: "C",
+        decade: "20s",
+        pdfUrl: downloadURL,
+      };
+      const docRef = await addDoc(tenantSongsCollectionRef(tenant), newPlaylist);
+      setSongs((prev) => [...prev, { id: docRef.id, ...newPlaylist }]);
+      alert("Playlist saved successfully!");
+    } catch (err) {
+      console.error("Error saving playlist:", err);
+      alert("Failed to save the playlist. Please try again.");
     }
   };
 
@@ -277,7 +539,7 @@ function App() {
     const index = selectedSongs.indexOf(id);
     if (index > 0) {
       const newOrder = [...selectedSongs];
-      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]]; // Swap positions
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
       setSelectedSongs(newOrder);
     }
   };
@@ -286,352 +548,357 @@ function App() {
     const index = selectedSongs.indexOf(id);
     if (index < selectedSongs.length - 1) {
       const newOrder = [...selectedSongs];
-      [newOrder[index + 1], newOrder[index]] = [newOrder[index], newOrder[index + 1]]; // Swap positions
+      [newOrder[index + 1], newOrder[index]] = [newOrder[index], newOrder[index + 1]];
       setSelectedSongs(newOrder);
     }
   };
 
-const handleSort = (key) => {
-  setSortConfig((prev) => {
-    const direction = prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc';
-    return { key, direction };
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const sortedSongs = [...songs].sort((a, b) => {
+    if (!sortConfig.key) return 0;
+    const aVal = a[sortConfig.key]?.toString().toLowerCase() || "";
+    const bVal = b[sortConfig.key]?.toString().toLowerCase() || "";
+    if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+    if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+    return 0;
   });
-};
 
-const sortedSongs = [...songs].sort((a, b) => {
-  if (!sortConfig.key) return 0; // No sorting if no key is selected
-
-  const aValue = a[sortConfig.key]?.toString().toLowerCase() || '';
-  const bValue = b[sortConfig.key]?.toString().toLowerCase() || '';
-
-  if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-  if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-  return 0;
-});
-
-const filteredSongs = songs.filter((song) =>
-  song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  song.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  song.decade.toLowerCase().includes(searchTerm.toLowerCase())
-);
+  const filteredSongs = songs.filter(
+    (song) =>
+      song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      song.artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      song.decade.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const generateRandomSelection = () => {
-    if (songs.length === 0) {
-      alert("No songs available to select.");
-      return;
-    }
-
-    // Shuffle the songs array and pick the first 10 songs
-    const shuffledSongs = [...songs].sort(() => 0.5 - Math.random());
-    const randomSelection = shuffledSongs.slice(0, 10).map((song) => song.id);
-
-    setSelectedSongs(randomSelection); // Update the selectedSongs state
+    if (songs.length === 0) { alert("No songs available to select."); return; }
+    const randomSelection = [...songs]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 10)
+      .map((s) => s.id);
+    setSelectedSongs(randomSelection);
   };
 
-  const clearPlaylist = () => {
-    setSelectedSongs([]); // Reset the selectedSongs state
-  };
+  const clearPlaylist = () => setSelectedSongs([]);
 
-const toggleFormVisibility = () => {
-  setIsFormVisible(!isFormVisible); // Toggle the form visibility
-};
+  // ── Render ────────────────────────────────────────────────────────────────
+  const appShell = (
+    <div
+      className="App"
+      style={{
+        backgroundImage: `url('/setlistgoblin.png')`,
+        backgroundSize: "620px 420px",
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "top",
+      }}
+    >
+      <header
+        className="App-header"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-start",
+          padding: "10px",
+          gap: "12px",
+          backgroundColor: "rgba(255,255,255,0)",
+          flexWrap: "wrap",
+        }}
+      >
+        <h1 style={{ fontSize: "1.5rem", margin: 0 }}>Setlist Goblin</h1>
 
-const handleSavePlaylist = async () => {
-  if (selectedSongs.length === 0) {
-    alert("Please select at least one song to save the playlist.");
-    return;
-  }
+        {/* Band name + invite code */}
+        {activeBandName && (
+          <span style={{ fontSize: "0.85rem", color: "#aaa" }}>
+            {activeBandName}
+          </span>
+        )}
+        {activeBandId && (
+          <button
+            onClick={handleCopyCode}
+            title="Copy invite code"
+            style={{
+              fontSize: "0.75rem",
+              letterSpacing: "0.15em",
+              padding: "4px 10px",
+              background: codeCopied ? "#2a5a2a" : "#1a1a1a",
+              color: codeCopied ? "#70c080" : "#c8a84b",
+              border: "1px solid #333",
+              borderRadius: "3px",
+              cursor: "pointer",
+            }}
+          >
+            {codeCopied ? "Copied!" : `Code: ${activeBandId}`}
+          </button>
+        )}
 
-  const today = new Date();
-  const formattedDate = today.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+        <button onClick={handleLogout}>Logout</button>
+        {error && <p style={{ color: "red", margin: 0 }}>{error}</p>}
+      </header>
 
-  try {
-    const mergedPdf = await PDFDocument.create(); // Create a new PDF document
+      <main>
+        {/* Search Section */}
+        <section style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "40px" }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: "50px" }}>
+            <input
+              type="text"
+              placeholder="Search songs..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ padding: "15px", width: "200px", fontSize: "1.2rem", marginTop: "200px" }}
+            />
+            <button
+              onClick={() => setSearchTerm("")}
+              style={{ marginLeft: "10px", padding: "10px 20px", fontSize: "1.2rem", marginTop: "200px" }}
+            >
+              Clear
+            </button>
+          </div>
 
-    for (const songId of selectedSongs) {
-      const song = songs.find((s) => s.id === songId);
-      if (!song) continue;
+          {/* Button Row */}
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
+            {selectedSongs.length > 0 && (
+              <button onClick={clearPlaylist} style={{ backgroundColor: "#DC143C", color: "white" }}>
+                Clear Playlist
+              </button>
+            )}
+            <button onClick={() => setIsFormVisible(!isFormVisible)}>
+              {isFormVisible ? "Hide Add Song Form" : "Add a New Song"}
+            </button>
+            {songs.length > 0 && (
+              <button onClick={generateRandomSelection}>Generate Random Playlist</button>
+            )}
+            {selectedSongs.length > 0 && (
+              <button
+                onClick={mergePDFs}
+                disabled={isLoading}
+                style={{ backgroundColor: "#28a745", color: "white" }}
+              >
+                {isLoading ? "Building…" : "Download Playlist PDF"}
+              </button>
+            )}
+            <button onClick={handleSavePlaylist} style={{ backgroundColor: "#0078d4", color: "white" }}>
+              Save Playlist
+            </button>
+          </div>
+        </section>
 
-      const pdfBytes = await fetch(song.pdfUrl).then((res) => res.arrayBuffer());
-      const pdf = await PDFDocument.load(pdfBytes);
-      const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-      copiedPages.forEach((page) => mergedPdf.addPage(page));
-    }
-
-    const mergedPdfBytes = await mergedPdf.save();
-    const blob = new Blob([mergedPdfBytes], { type: "application/pdf" });
-
-    // Save the PDF to Firebase Storage
-    const storageRef = ref(storage, `playlists/Playlist-${formattedDate}.pdf`);
-    await uploadBytes(storageRef, blob);
-    const downloadURL = await getDownloadURL(storageRef);
-
-    const newPlaylist = {
-      title: `Playlist - ${formattedDate}`,
-      artist: "US",
-      key: "C",
-      decade: "20s",
-      pdfUrl: downloadURL, // Save the download URL to Firestore
-    };
-
-    const docRef = await addDoc(collection(db, "songs"), newPlaylist); // Save to Firestore
-    setSongs((prev) => [...prev, { id: docRef.id, ...newPlaylist }]); // Update local state
-
-    alert("Playlist saved successfully!");
-  } catch (error) {
-    console.error("Error saving playlist:", error);
-    alert("Failed to save the playlist. Please try again.");
-  }
-};
-
-return (
-  <div
-  className="App"
-  style={{
-    backgroundImage: `url('/setlistgoblin.png')`,
-    backgroundSize: "620px 420px", // Ensure both images have the same size
-    backgroundRepeat: "no-repeat, no-repeat", // Prevent repetition for both images
-    backgroundPosition: "top", // Position one on the left and the other on the right
-  }}
->
-  <header
-    className="App-header"
-    style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", padding: "10px", backgroundColor: "rgba(255, 255, 255, 0)" }}
-  >
-    <h1 style={{ fontSize: "1.5rem", margin: 0, marginRight: "20px" }}>Setlist Goblin</h1>
-    <button onClick={handleLogout}>Logout</button>
-    {error && <p style={{ color: "red", marginLeft: "20px" }}>{error}</p>}
-  </header>
-  <main>
-    {/* Search Section */}
-    <section style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "40px" }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: "50px" }}>
-        <input
-          type="text"
-          placeholder="Search songs..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ padding: "15px", width: "200px", fontSize: "1.2rem", marginTop: "200px" }}
-        />
-        <button
-          onClick={() => setSearchTerm("")}
-            style={{ marginLeft: "10px", padding: "10px 20px", fontSize: "1.2rem", marginTop: "200px" }}
-        >
-          Clear
-        </button>
-      </div>
-                {/* Button Row */}
-    <div style={{ display: "flex", gap: "10px" }}>
-      {selectedSongs.length > 0 && (
-        <button onClick={clearPlaylist} style={{ backgroundColor: "#DC143C", color: "white" }}>
-          Clear Playlist
-        </button>
-      )}
-      <button onClick={() => setIsFormVisible(!isFormVisible)}>
-        {isFormVisible ? "Hide Add Song Form" : "Add a New Song"}
-      </button>
-      {songs.length > 0 && (
-        <button onClick={generateRandomSelection}>
-          Generate Random Playlist
-        </button>
-      )}
-      <button onClick={handleSavePlaylist} style={{ backgroundColor: "#0078d4", color: "white" }}>
-        Save Playlist
-      </button>
-    </div>
-    </section>
-
-
-{/* Form Section */}
-{isFormVisible && (
-  <section>
-    <h2>{editingSongId ? "Edit Song" : "Add a New Song"}</h2>
-    <form onSubmit={handleAddOrUpdateSong} className="song-form">
-      {/* Title Input */}
-      <div className="form-group">
-        <label htmlFor="title">Title:</label>
-        <input
-          type="text"
-          id="title"
-          name="title"
-          value={newSong.title}
-          onChange={handleInputChange}
-          placeholder="Enter song title"
-          required
-        />
-      </div>
-      {/* Key Dropdown */}
-       <div className="form-group">
-        <label htmlFor="key">Key:</label>
-        <Select
-          id="key"
-          name="key"
-          options={keyOptions}
-          value={keyOptions.find((option) => option.value === newSong.key)}
-          onChange={(selectedOption) =>
-            setNewSong((prev) => ({ ...prev, key: selectedOption.value }))
-          }
-          placeholder="Select a key"
-        />
-      </div>
-      {/* Decade Input */}
-       <div className="form-group">
-        <label htmlFor="decade">Decade:</label>
-        <select
-          id="decade"
-          name="decade"
-          value={newSong.decade}
-          onChange={handleInputChange}
-          required
-        >
-          <option value="" disabled>
-            Select a decade
-          </option>
-          <option value="50s">50s</option>
-          <option value="60s">60s</option>
-          <option value="70s">70s</option>
-          <option value="80s">80s</option>
-          <option value="90s">90s</option>
-          <option value="00s">00s</option>
-          <option value="10s">10s</option>
-          <option value="20s">20s</option>
-        </select>
-      </div>
-      {/* Artist Input */}
-      <div className="form-group">
-        <label htmlFor="artist">Artist:</label>
-        <input
-          type="text"
-          id="artist"
-          name="artist"
-          value={newSong.artist}
-          onChange={handleInputChange}
-          placeholder="Enter artist name"
-          required
-        />
-      </div>
-      {/* File Upload */}
-      <div className="form-group">
-        <label htmlFor="pdf">Upload PDF:</label>
-        <input
-          type="file"
-          id="pdf"
-          accept=".pdf"
-          onChange={(e) => handleFileUpload(e.target.files[0])}
-        />
-        {uploadedFileName && <p>Uploaded File: {uploadedFileName}</p>}
-      </div>
-      {/* Submit Button */}
-       <div className="form-group">
-        <button type="submit">
-          {editingSongId ? "Update Song" : "Add Song"}
-        </button>
-      </div>
-    </form>
-  </section>
-)}
-          {selectedSongs.length > 0 && (
-            <section>
-              <h2 style={{ textAlign: "center" }}>Selected Songs</h2>
-              <ul>
-                {selectedSongs.map((id) => {
-                  const song = songs.find((s) => s.id === id);
-                  return (
-                    <li key={id}>
-                      <div className="song-details">
-                        {song.title} - {song.artist}
-                      </div>
-                      <div className="song-buttons">
-                        <button onClick={() => moveSongUp(id)}>Move Up</button>
-                        <button onClick={() => moveSongDown(id)}>Move Down</button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
-        {/* Song List Section */}
+        {/* Form Section */}
+        {isFormVisible && (
           <section>
-            <table>
-              <thead>
-                <tr>
-                  <th>Select</th>
-                  <th onClick={() => handleSort('title')}>
-                    Title {sortConfig.key === 'title' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th onClick={() => handleSort('artist')}>
-                    Artist {sortConfig.key === 'artist' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th onClick={() => handleSort('key')}
-                    style={{
-                      width: "25px",      // Slightly wider to ensure "Delete" fits
-                      textAlign: "left",  // Aligns text to the left
-                      paddingLeft: "8px"  // Removes the inner gap on the left side
-                    }}>
-                    Key {sortConfig.key === 'key' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
-                    <th onClick={() => handleSort('decade')} style={{
-                      width: "60px",      // Slightly wider to ensure "Delete" fits
-                      textAlign: "left",  // Aligns text to the left
-                      paddingLeft: "8px"  // Removes the inner gap on the left side
-                    }}>
-                    Decade {sortConfig.key === 'decade' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
-              <th style={{ textAlign: 'center' }}>Actions</th>                </tr>
-              </thead>
-              <tbody>
-                {(searchTerm.trim() ? filteredSongs : sortedSongs).map((song) => (
-                  <tr key={song.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedSongs.includes(song.id)}
-                        onChange={(e) => handleSelectSong(song.id, e.target.checked)}
-                      />
-                    </td>
-                    <td>{song.title}</td>
-                    <td>{song.artist}</td>
-                    <td>{song.key}</td>
-                    <td>{song.decade}</td>
-                    <td>
-                      <button
-                        onClick={() => window.open(song.pdfUrl, "_blank")}
-                        style={{ backgroundColor: "#007BFF", color: "white", marginRight: "10px" }}
-                      >
-                        OPEN
-                      </button>
-                      <button onClick={() => handleEditSong(song)} style={{ marginRight: "11px" }}>
-                        Edit
-                      </button>
+            <h2>{editingSongId ? "Edit Song" : "Add a New Song"}</h2>
+            <form onSubmit={handleAddOrUpdateSong} className="song-form">
+              <div className="form-group">
+                <label htmlFor="title">Title:</label>
+                <input
+                  type="text" id="title" name="title"
+                  value={newSong.title} onChange={handleInputChange}
+                  placeholder="Enter song title" required
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="key">Key:</label>
+                <Select
+                  id="key" name="key" options={keyOptions}
+                  value={keyOptions.find((o) => o.value === newSong.key)}
+                  onChange={(opt) => setNewSong((prev) => ({ ...prev, key: opt.value }))}
+                  placeholder="Select a key"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="decade">Decade:</label>
+                <select id="decade" name="decade" value={newSong.decade} onChange={handleInputChange} required>
+                  <option value="" disabled>Select a decade</option>
+                  {["50s","60s","70s","80s","90s","00s","10s","20s"].map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="artist">Artist:</label>
+                <input
+                  type="text" id="artist" name="artist"
+                  value={newSong.artist} onChange={handleInputChange}
+                  placeholder="Enter artist name" required
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="pdf">Upload PDF:</label>
+                <input
+                  type="file" id="pdf" accept=".pdf"
+                  onChange={(e) => handleFileUpload(e.target.files[0])}
+                />
+                {uploadedFileName && <p>Uploaded File: {uploadedFileName}</p>}
+              </div>
+              <div className="form-group">
+                <button type="submit">{editingSongId ? "Update Song" : "Add Song"}</button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {/* Selected Songs */}
+        {selectedSongs.length > 0 && (
+          <section>
+            <h2 style={{ textAlign: "center" }}>Selected Songs</h2>
+            <ul>
+              {selectedSongs.map((id) => {
+                const song = songs.find((s) => s.id === id);
+                if (!song) return null;
+                return (
+                  <li key={id}>
+                    <div className="song-details">{song.title} - {song.artist}</div>
+                    <div className="song-buttons">
+                      <button onClick={() => moveSongUp(id)}>Move Up</button>
+                      <button onClick={() => moveSongDown(id)}>Move Down</button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {/* Song List */}
+        <section>
+          <table>
+            <thead>
+              <tr>
+                <th>Select</th>
+                <th onClick={() => handleSort("title")} style={{ cursor: "pointer" }}>
+                  Title {sortConfig.key === "title" && (sortConfig.direction === "asc" ? "↑" : "↓")}
+                </th>
+                <th onClick={() => handleSort("artist")} style={{ cursor: "pointer" }}>
+                  Artist {sortConfig.key === "artist" && (sortConfig.direction === "asc" ? "↑" : "↓")}
+                </th>
+                <th onClick={() => handleSort("key")} style={{ cursor: "pointer", width: "25px", textAlign: "left", paddingLeft: "8px" }}>
+                  Key {sortConfig.key === "key" && (sortConfig.direction === "asc" ? "↑" : "↓")}
+                </th>
+                <th onClick={() => handleSort("decade")} style={{ cursor: "pointer", width: "60px", textAlign: "left", paddingLeft: "8px" }}>
+                  Decade {sortConfig.key === "decade" && (sortConfig.direction === "asc" ? "↑" : "↓")}
+                </th>
+                <th style={{ textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(searchTerm.trim() ? filteredSongs : sortedSongs).map((song) => (
+                <tr key={song.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedSongs.includes(song.id)}
+                      onChange={(e) => handleSelectSong(song.id, e.target.checked)}
+                    />
+                  </td>
+                  <td>{song.title}</td>
+                  <td>{song.artist}</td>
+                  <td>{song.key}</td>
+                  <td>{song.decade}</td>
+                  <td>
+                    <button
+                      onClick={async () => {
+                        const pdfTab = window.open("about:blank", "_blank");
+                        if (!pdfTab) {
+                          alert("Popup blocked. Please allow popups for this site to open PDFs in a new tab.");
+                          return;
+                        }
+
+                        pdfTab.document.title = "Opening PDF...";
+                        pdfTab.document.body.innerHTML = "<p style='font-family:Georgia,serif;padding:24px;'>Loading PDF...</p>";
+
+                        try {
+                          const resolvedUrl = await resolveSongPdfUrl(song);
+                          if (!resolvedUrl) throw new Error("No resolved URL available");
+                          pdfTab.location.replace(resolvedUrl);
+                        } catch (err) {
+                          console.error("Error opening PDF:", err);
+                          const fallbackUrl = song?.pdfUrl || song?.pdfPath || "";
+                          if (fallbackUrl) {
+                            pdfTab.location.replace(fallbackUrl);
+                            return;
+                          }
+                          pdfTab.close();
+                          alert("Could not open this PDF. This song is missing a valid PDF URL. Edit the song and upload the PDF again.");
+                        }
+                      }}
+                      style={{ backgroundColor: "#007BFF", color: "white", marginRight: "10px" }}
+                    >
+                      OPEN
+                    </button>
+                    <button onClick={() => handleEditSong(song)} style={{ marginRight: "11px" }}>
+                      Edit
+                    </button>
+                    {userRole === "admin" && (
                       <button
                         onClick={() => handleDeleteSong(song.id)}
-                        style={{
-                          color: "red",
-                          width: "60px",      // Slightly wider to ensure "Delete" fits
-                          textAlign: "left",  // Aligns text to the left
-                          paddingLeft: "5px"  // Removes the inner gap on the left side
-                        }}
+                        style={{ color: "red", width: "60px", textAlign: "left", paddingLeft: "5px" }}
                       >
                         Delete
                       </button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredSongs.length === 0 && searchTerm.trim() !== "" && (
-                  <tr>
-                    <td colSpan="6" style={{ textAlign: "center" }}>
-                      No songs found matching your search criteria.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </section>
-        </main>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {filteredSongs.length === 0 && searchTerm.trim() !== "" && (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: "center" }}>
+                    No songs found matching your search criteria.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+  );
+
+  if (!isAppReady) {
+    return (
+      <div style={{ padding: "40px", textAlign: "center", fontFamily: "Georgia, serif" }}>
+        <h2>Loading your band...</h2>
       </div>
     );
   }
 
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          isAuthed
+            ? <Navigate to={hasTenantBand ? "/" : "/onboarding"} replace />
+            : <Login onLogin={handleLoginComplete} />
+        }
+      />
+      <Route
+        path="/onboarding"
+        element={
+          !isAuthed
+            ? <Navigate to="/login" replace />
+            : hasTenantBand
+              ? <Navigate to="/" replace />
+              : <BandOnboarding user={user} onComplete={() => refreshTenantContext(user)} onLogout={handleLogout} />
+        }
+      />
+      <Route
+        path="/"
+        element={
+          !isAuthed
+            ? <Navigate to="/login" replace />
+            : !hasTenantBand
+              ? <Navigate to="/onboarding" replace />
+              : appShell
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
 export default App;

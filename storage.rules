@@ -1,20 +1,42 @@
 rules_version = '2';
-
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isBandMember(bandId) {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/bands/$(bandId)/members/$(request.auth.uid));
+    }
+
+    function isBandAdmin(bandId) {
+      return isSignedIn() &&
+        firestore.get(/databases/(default)/documents/bands/$(bandId)/members/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function isValidPdf() {
+      return request.resource.contentType == 'application/pdf'
+        && request.resource.size < 5 * 1024 * 1024; // 5MB
+    }
+
+    // Song chart PDFs uploaded from the add/edit form.
+    match /bands/{bandId}/pdfs/{fileName} {
+      allow read: if isBandMember(bandId);
+      allow create, update: if isBandMember(bandId) && isValidPdf();
+      allow delete: if isBandAdmin(bandId);
+    }
+
+    // Generated playlist PDFs.
+    match /bands/{bandId}/playlists/{fileName} {
+      allow read: if isBandMember(bandId);
+      allow create, update: if isBandMember(bandId) && isValidPdf();
+      allow delete: if isBandAdmin(bandId);
+    }
+
+    // Deny everything else by default.
     match /{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.token.email in [
-        'william.cherrette@gmail.com',
-        'ryanf@schepersbrothers.com',
-        'bairjon.JB@gmail.com',
-        'Galmy177@gmail.com',
-        'kwebert80@gmail.com',
-        'martyschrauben@gmail.com',
-        'matt.overweg@springportschools.net'
-      ]
+      allow read, write: if false;
     }
   }
 }
