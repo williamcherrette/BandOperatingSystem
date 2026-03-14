@@ -1,7 +1,8 @@
 {
   "projects": {
     "default": "song-list-app-794b9",
-    "bandOS": "band-os-1d6e7"
+    "bandOS": "band-os-1d6e7",
+    "dev": "band-os-dev"
   },
   "targets": {},
   "etags": {}
