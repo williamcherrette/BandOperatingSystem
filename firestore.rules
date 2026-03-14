@@ -4,17 +4,13 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
-
     function isSelf(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
-
     function isBandMember(bandId) {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/bands/$(bandId)/members/$(request.auth.uid));
     }
-
-    // Single get() instead of exists() + get()
     function isBandAdmin(bandId) {
       return isSignedIn() &&
         get(/databases/$(database)/documents/bands/$(bandId)/members/$(request.auth.uid)).data.role == "admin";
@@ -23,8 +19,6 @@ service cloud.firestore {
     // User profile document: users/{uid}
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
-
-      // User's band membership index: users/{uid}/bands/{bandId}
       match /bands/{bandId} {
         allow read, create, update, delete: if isSelf(uid);
       }
@@ -32,36 +26,36 @@ service cloud.firestore {
 
     // Band root document: bands/{bandId}
     match /bands/{bandId} {
-      // Signed-in users must be able to read band root docs to:
-      // 1) validate join codes before membership exists
-      // 2) check random code availability during band creation
-      allow read: if isSignedIn() || isBandMember(bandId);
-
-      // Allow any signed-in user to create a new band where they are owner.
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-
-      // Band admins can maintain band metadata.
       allow update, delete: if isBandAdmin(bandId);
 
       // Band member documents: bands/{bandId}/members/{uid}
       match /members/{uid} {
         allow read: if isBandMember(bandId);
-
-        // Combined: members can join as "member", band owner can self-assign "admin"
         allow create: if isSelf(uid) && (
           request.resource.data.role == "member" ||
           (request.resource.data.role == "admin" &&
             get(/databases/$(database)/documents/bands/$(bandId)).data.ownerId == request.auth.uid)
         );
-
-        // Admins can update/remove members.
         allow update, delete: if isBandAdmin(bandId);
       }
 
       // Songs collection: bands/{bandId}/songs/{songId}
       match /songs/{songId} {
         allow read: if isBandMember(bandId);
-        allow create, update: if isBandMember(bandId);
+        allow create: if isBandMember(bandId);
+        allow update: if isBandMember(bandId) &&
+          request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isBandAdmin(bandId);
+      }
+
+      // Setlists collection: bands/{bandId}/setlists/{setlistId}
+      match /setlists/{setlistId} {
+        allow read: if isBandMember(bandId);
+        allow create: if isBandMember(bandId);
+        allow update: if isBandMember(bandId) &&
+          request.resource.data.createdBy == resource.data.createdBy;
         allow delete: if isBandAdmin(bandId);
       }
     }
