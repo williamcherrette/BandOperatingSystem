@@ -1,0 +1,21 @@
+[33mcommit c3a96110a071f4d952e9792c120d9dbe98d11901[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: test test <chipchristmas@live.com>
+Date:   Sat Mar 14 14:29:27 2026 -0400
+
+    initial commit
+
+ .firebase/hosting.YnVpbGQ.cache |   18 [32m+[m[31m-[m
+ .firebaserc                     |    9 [32m+[m[31m-[m
+ .gitignore                      |    7 [32m+[m
+ firebase.json                   |    7 [32m+[m
+ firestore.rules                 |   79 [32m+[m[31m-[m
+ package-lock.json               | 6049 [32m++++++++++++++++++++++++[m[31m---------------[m
+ package.json                    |    1 [32m+[m
+ src/App.js                      | 1239 [32m++++[m[31m----[m
+ src/bandMembershipService.js    |  136 [32m+[m
+ src/firebase.js                 |    4 [32m+[m[31m-[m
+ src/index.js                    |    5 [32m+[m[31m-[m
+ src/login.js                    |  559 [32m+++[m[31m-[m
+ src/tenantContext.js            |  159 [32m+[m
+ storage.rules                   |   50 [32m+[m[31m-[m
+ 14 files changed, 5379 insertions(+), 2943 deletions(-)

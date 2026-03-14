@@ -14,6 +14,9 @@
 # misc
 .DS_Store
 .env.local
+.env.devevelopment
+.env.qa
+.env.production
 .env.development.local
 .env.test.local
 .env.production.local
@@ -21,6 +24,8 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pdfs
+
 
 # Firebase
 .firebase/
@@ -28,3 +33,4 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 database-debug.log
+src/song-list-app-794b9-firebase-adminsdk-fbsvc-cec2b7b59e.json

@@ -1,0 +1,261 @@
+[33mcommit f9bbeff679880a1a7a46a914a6be6b002d42c3c5[m
+Author: test test <chipchristmas@live.com>
+Date:   Sat Mar 7 19:25:52 2026 -0500
+
+    Initial commit
+
+ .firebase/hosting.YnVpbGQ.cache                    |    16 [32m+[m
+ .firebase/hosting.cHVibGlj.cache                   |     7 [32m+[m
+ .firebaserc                                        |     5 [32m+[m
+ .gitignore                                         |    23 [32m+[m
+ README.md                                          |    70 [32m+[m
+ apphosting.yaml                                    |    23 [32m+[m
+ .../js/default-connector/README.md                 |    56 [32m+[m
+ .../js/default-connector/esm/index.esm.js          |     7 [32m+[m
+ .../js/default-connector/esm/package.json          |     1 [32m+[m
+ .../js/default-connector/index.cjs.js              |     8 [32m+[m
+ .../js/default-connector/index.d.ts                |    10 [32m+[m
+ .../js/default-connector/package.json              |    33 [32m+[m
+ .../js/default-connector/react/README.md           |    96 [32m+[m
+ .../js/default-connector/react/esm/index.esm.js    |     0
+ .../js/default-connector/react/esm/package.json    |     1 [32m+[m
+ .../js/default-connector/react/index.cjs.js        |     0
+ .../js/default-connector/react/index.d.ts          |     6 [32m+[m
+ .../js/default-connector/react/package.json        |    17 [32m+[m
+ dataconnect/connector/connector.yaml               |     7 [32m+[m
+ dataconnect/connector/mutations.gql                |    33 [32m+[m
+ dataconnect/connector/queries.gql                  |    78 [32m+[m
+ dataconnect/dataconnect.yaml                       |    12 [32m+[m
+ dataconnect/schema/schema.gql                      |    52 [32m+[m
+ firebase.json                                      |    16 [32m+[m
+ firestore.indexes.json                             |     4 [32m+[m
+ firestore.rules                                    |    17 [32m+[m
+ functions/.eslintrc.js                             |    33 [32m+[m
+ functions/.gitignore                               |    10 [32m+[m
+ functions/package-lock.json                        | 10848 [32m++++++++++[m
+ functions/package.json                             |    35 [32m+[m
+ functions/src/index.ts                             |    19 [32m+[m
+ functions/tsconfig.dev.json                        |     5 [32m+[m
+ functions/tsconfig.json                            |    18 [32m+[m
+ nn/404.html                                        |    33 [32m+[m
+ nn/index.html                                      |    89 [32m+[m
+ package-lock.json                                  | 19666 [32m+++++++++++++++++++[m
+ package.json                                       |    43 [32m+[m
+ public/cors.json                                   |     8 [32m+[m
+ public/favicon.ico                                 |   Bin [31m0[m -> [32m3870[m bytes
+ public/index.html                                  |    43 [32m+[m
+ public/logo192.png                                 |   Bin [31m0[m -> [32m5347[m bytes
+ public/logo512.png                                 |   Bin [31m0[m -> [32m9664[m bytes
+ public/manifest.json                               |    25 [32m+[m
+ public/robots.txt                                  |     3 [32m+[m
+ public/setlistgoblin.png                           |   Bin [31m0[m -> [32m287917[m bytes
+ remoteconfig.template.json                         |     1 [32m+[m
+ src/App.css                                        |   397 [32m+[m
+ src/App.js                                         |   637 [32m+[m
+ src/App.test.js                                    |     8 [32m+[m
+ src/cleanPdfUrls.js                                |    27 [32m+[m
+ src/firebase.js                                    |    21 [32m+[m
+ src/index.css                                      |    13 [32m+[m
+ src/index.js                                       |    17 [32m+[m
+ src/login.js                                       |    71 [32m+[m
+ src/logo.svg                                       |     1 [32m+[m
+ src/pdfs/3 AM.pdf                                  |   Bin [31m0[m -> [32m494790[m bytes
+ src/pdfs/500 MIles.pdf                             |   Bin [31m0[m -> [32m155046[m bytes
+ src/pdfs/A Pirate Looks At 40.pdf                  |   Bin [31m0[m -> [32m95761[m bytes
+ src/pdfs/AFTER MIDNIGHT.pdf                        |   Bin [31m0[m -> [32m84360[m bytes
+ src/pdfs/AISA MINOR.pdf                            |   Bin [31m0[m -> [32m34586[m bytes
+ src/pdfs/All For You.pdf                           |   Bin [31m0[m -> [32m49279[m bytes
+ src/pdfs/Althea001.pdf                             |   Bin [31m0[m -> [32m1120159[m bytes
+ src/pdfs/American Girl.pdf                         |   Bin [31m0[m -> [32m96246[m bytes
+ src/pdfs/Atlantic City (Band).pdf                  |   Bin [31m0[m -> [32m12353[m bytes
+ src/pdfs/Atlantic City.pdf                         |   Bin [31m0[m -> [32m109531[m bytes
+ src/pdfs/BIODTL.pdf                                |   Bin [31m0[m -> [32m9475[m bytes
+ src/pdfs/BLack Peter.pdf                           |   Bin [31m0[m -> [32m92006[m bytes
+ src/pdfs/Bad Moon Rising.pdf                       |   Bin [31m0[m -> [32m80898[m bytes
+ src/pdfs/Bertha.pdf                                |   Bin [31m0[m -> [32m126262[m bytes
+ src/pdfs/Black Muddy River.pdf                     |   Bin [31m0[m -> [32m54464[m bytes
+ src/pdfs/Boat Drinks.pdf                           |   Bin [31m0[m -> [32m123436[m bytes
+ src/pdfs/Box O Rain.pdf                            |   Bin [31m0[m -> [32m11306[m bytes
+ src/pdfs/Brain Stew.pdf                            |   Bin [31m0[m -> [32m97676[m bytes
+ src/pdfs/Breakfast At Tiffan1.pdf                  |   Bin [31m0[m -> [32m102256[m bytes
+ src/pdfs/Brown Eyed Girl.pdf                       |   Bin [31m0[m -> [32m125867[m bytes
+ src/pdfs/Brown Eyed Women.pdf                      |   Bin [31m0[m -> [32m164672[m bytes
+ src/pdfs/COCAIN.pdf                                |   Bin [31m0[m -> [32m23584[m bytes
+ src/pdfs/CREEP.pdf                                 |   Bin [31m0[m -> [32m44791[m bytes
+ src/pdfs/Californication.pdf                       |   Bin [31m0[m -> [32m228976[m bytes
+ src/pdfs/Can_t You See.pdf                         |   Bin [31m0[m -> [32m120593[m bytes
+ src/pdfs/Candyman.pdf                              |   Bin [31m0[m -> [32m98326[m bytes
+ src/pdfs/Casey Jones.pdf                           |   Bin [31m0[m -> [32m94992[m bytes
+ src/pdfs/Centerfield.pdf                           |   Bin [31m0[m -> [32m57417[m bytes
+ src/pdfs/Cherry Bomb.pdf                           |   Bin [31m0[m -> [32m25992[m bytes
+ src/pdfs/Chicken Fried.pdf                         |   Bin [31m0[m -> [32m625520[m bytes
+ src/pdfs/China Cat Sunflower.pdf                   |   Bin [31m0[m -> [32m7395[m bytes
+ src/pdfs/Cold Jordon.pdf                           |   Bin [31m0[m -> [32m42917[m bytes
+ src/pdfs/Cold Rain & Snow.pdf                      |   Bin [31m0[m -> [32m70133[m bytes
+ src/pdfs/Cosmic Charlie.pdf                        |   Bin [31m0[m -> [32m403013[m bytes
+ src/pdfs/Cumberland Blues.pdf                      |   Bin [31m0[m -> [32m12813[m bytes
+ src/pdfs/Dancing In The Streets.pdf                |   Bin [31m0[m -> [32m93810[m bytes
+ src/pdfs/Deal.pdf                                  |   Bin [31m0[m -> [32m188791[m bytes
+ src/pdfs/Dear Prudence.pdf                         |   Bin [31m0[m -> [32m78754[m bytes
+ src/pdfs/Deep Elem Blues.pdf                       |   Bin [31m0[m -> [32m363068[m bytes
+ src/pdfs/Diamonds On The Souls Of Her Shoes.pdf    |   Bin [31m0[m -> [32m135995[m bytes
+ src/pdfs/Dont Stop Believing.pdf                   |   Bin [31m0[m -> [32m8665[m bytes
+ src/pdfs/Down On the Corner.pdf                    |   Bin [31m0[m -> [32m10052[m bytes
+ src/pdfs/Drift Away.pdf                            |   Bin [31m0[m -> [32m62344[m bytes
+ src/pdfs/Dupree Diamond Blues.pdf                  |   Bin [31m0[m -> [32m46538[m bytes
+ src/pdfs/East Bound & Down.pdf                     |   Bin [31m0[m -> [32m101509[m bytes
+ src/pdfs/Enough To Leave.pdf                       |   Bin [31m0[m -> [32m49245[m bytes
+ src/pdfs/Estimated Prophet.pdf                     |   Bin [31m0[m -> [32m592354[m bytes
+ src/pdfs/Exchange Pricing.pdf                      |   Bin [31m0[m -> [32m90875[m bytes
+ src/pdfs/Eyes Of The World.pdf                     |   Bin [31m0[m -> [32m117321[m bytes
+ src/pdfs/Feelin Alright.pdf                        |   Bin [31m0[m -> [32m24569[m bytes
+ src/pdfs/Fire On The Mountain.pdf                  |   Bin [31m0[m -> [32m103586[m bytes
+ src/pdfs/Fortunate Son.pdf                         |   Bin [31m0[m -> [32m79882[m bytes
+ src/pdfs/Frankins Tower.pdf                        |   Bin [31m0[m -> [32m132704[m bytes
+ src/pdfs/Friend OF The dEVIL.pdf                   |   Bin [31m0[m -> [32m139100[m bytes
+ src/pdfs/GDTRFB.pdf                                |   Bin [31m0[m -> [32m111663[m bytes
+ src/pdfs/GIVE ME THREE STEPS.pdf                   |   Bin [31m0[m -> [32m63870[m bytes
+ src/pdfs/Glory Days.pdf                            |   Bin [31m0[m -> [32m20583[m bytes
+ src/pdfs/Golden Road.pdf                           |   Bin [31m0[m -> [32m93210[m bytes
+ src/pdfs/Good Lovin.pdf                            |   Bin [31m0[m -> [32m46724[m bytes
+ src/pdfs/Great Fillin Station Hold Up001.pdf       |   Bin [31m0[m -> [32m415973[m bytes
+ src/pdfs/HARD To HANDLE.pdf                        |   Bin [31m0[m -> [32m152015[m bytes
+ src/pdfs/HOME SWEET HOME.pdf                       |   Bin [31m0[m -> [32m84846[m bytes
+ src/pdfs/Half Step.pdf                             |   Bin [31m0[m -> [32m125847[m bytes
+ src/pdfs/Hell In A Bucketpdf.pdf                   |   Bin [31m0[m -> [32m244818[m bytes
+ src/pdfs/Hes Gone.pdf                              |   Bin [31m0[m -> [32m124750[m bytes
+ src/pdfs/Hey Jude.pdf                              |   Bin [31m0[m -> [32m63729[m bytes
+ src/pdfs/High Time.pdf                             |   Bin [31m0[m -> [32m119700[m bytes
+ src/pdfs/Home Sweet Home (Band).pdf                |   Bin [31m0[m -> [32m83774[m bytes
+ src/pdfs/Honky Tonk Woman.pdf                      |   Bin [31m0[m -> [32m160822[m bytes
+ src/pdfs/Hotel California.pdf                      |   Bin [31m0[m -> [32m68023[m bytes
+ src/pdfs/I know You Rider.pdf                      |   Bin [31m0[m -> [32m105050[m bytes
+ src/pdfs/I need a Miracle.pdf                      |   Bin [31m0[m -> [32m100129[m bytes
+ src/pdfs/I should have been a cowboy.pdf           |   Bin [31m0[m -> [32m657812[m bytes
+ src/pdfs/I_ll Fly Away.pdf                         |   Bin [31m0[m -> [32m9448[m bytes
+ src/pdfs/Im In A Hurry (Band).pdf                  |   Bin [31m0[m -> [32m9263[m bytes
+ src/pdfs/Im In A Hurry.pdf                         |   Bin [31m0[m -> [32m84841[m bytes
+ src/pdfs/Inside Out by Eve 6.pdf                   |   Bin [31m0[m -> [32m50466[m bytes
+ src/pdfs/It_s ALl Over Now.pdf                     |   Bin [31m0[m -> [32m9063[m bytes
+ src/pdfs/Jack Straw.pdf                            |   Bin [31m0[m -> [32m227390[m bytes
+ src/pdfs/Jack and Diane.pdf                        |   Bin [31m0[m -> [32m145634[m bytes
+ src/pdfs/K.C. Moan.pdf                             |   Bin [31m0[m -> [32m60078[m bytes
+ src/pdfs/Kick It In Second Wind001.pdf             |   Bin [31m0[m -> [32m451549[m bytes
+ src/pdfs/LAST KISS.pdf                             |   Bin [31m0[m -> [32m84425[m bytes
+ src/pdfs/LAY DOWN SALLY.pdf                        |   Bin [31m0[m -> [32m84297[m bytes
+ src/pdfs/LIBERTY.pdf                               |   Bin [31m0[m -> [32m89166[m bytes
+ src/pdfs/LOVELY CRUISE.pdf                         |   Bin [31m0[m -> [32m62109[m bytes
+ src/pdfs/Last Dance.pdf                            |   Bin [31m0[m -> [32m625895[m bytes
+ src/pdfs/Last Time.pdf                             |   Bin [31m0[m -> [32m85482[m bytes
+ src/pdfs/Let It Rock.pdf                           |   Bin [31m0[m -> [32m126680[m bytes
+ src/pdfs/Let The Good Times Roll.pdf               |   Bin [31m0[m -> [32m23064[m bytes
+ src/pdfs/Little Red Riding Hood.pdf                |   Bin [31m0[m -> [32m517252[m bytes
+ src/pdfs/Livingston Saturday Nigh1.pdf             |   Bin [31m0[m -> [32m21490[m bytes
+ src/pdfs/Long Hair Country Boy.pdf                 |   Bin [31m0[m -> [32m124936[m bytes
+ src/pdfs/Loose Lucy.pdf                            |   Bin [31m0[m -> [32m63907[m bytes
+ src/pdfs/Loser.pdf                                 |   Bin [31m0[m -> [32m117201[m bytes
+ src/pdfs/Louie Louie.pdf                           |   Bin [31m0[m -> [32m77397[m bytes
+ src/pdfs/Man Smart Woman Smarter.pdf               |   Bin [31m0[m -> [32m49710[m bytes
+ src/pdfs/Margaritaville.pdf                        |   Bin [31m0[m -> [32m81858[m bytes
+ src/pdfs/Me & Julio.pdf                            |   Bin [31m0[m -> [32m8698[m bytes
+ src/pdfs/Me And My Uncle.pdf                       |   Bin [31m0[m -> [32m99950[m bytes
+ src/pdfs/Midnight Hour.pdf                         |   Bin [31m0[m -> [32m79166[m bytes
+ src/pdfs/Mississippi Half Step.pdf                 |   Bin [31m0[m -> [32m125632[m bytes
+ src/pdfs/Monkey & The Engineer.pdf                 |   Bin [31m0[m -> [32m88894[m bytes
+ src/pdfs/Morning Dew.pdf                           |   Bin [31m0[m -> [32m61804[m bytes
+ src/pdfs/Mr Jones - Lyrics ONLY.pdf                |   Bin [31m0[m -> [32m45098[m bytes
+ src/pdfs/Mr Jones.pdf                              |   Bin [31m0[m -> [32m728619[m bytes
+ src/pdfs/Never been to Spain.pdf                   |   Bin [31m0[m -> [32m116291[m bytes
+ src/pdfs/New Minglewood Blues.pdf                  |   Bin [31m0[m -> [32m179610[m bytes
+ src/pdfs/New Speedway Boogie.pdf                   |   Bin [31m0[m -> [32m93151[m bytes
+ src/pdfs/Not Fade Away.pdf                         |   Bin [31m0[m -> [32m139431[m bytes
+ src/pdfs/One More Saturday Night 2.pdf             |   Bin [31m0[m -> [32m50092[m bytes
+ src/pdfs/Paint It Black.pdf                        |   Bin [31m0[m -> [32m95668[m bytes
+ src/pdfs/Peggy-o.pdf                               |   Bin [31m0[m -> [32m6639[m bytes
+ src/pdfs/Playing In The Band.pdf                   |   Bin [31m0[m -> [32m24673[m bytes
+ src/pdfs/Presents to send you.pdf                  |   Bin [31m0[m -> [32m82325[m bytes
+ src/pdfs/Promised Land.pdf                         |   Bin [31m0[m -> [32m136260[m bytes
+ src/pdfs/RIPPLE.pdf                                |   Bin [31m0[m -> [32m19460[m bytes
+ src/pdfs/ROCK in the USA.pdf                       |   Bin [31m0[m -> [32m66341[m bytes
+ src/pdfs/RODEO.pdf                                 |   Bin [31m0[m -> [32m87986[m bytes
+ src/pdfs/Ramble On Rose.pdf                        |   Bin [31m0[m -> [32m139465[m bytes
+ src/pdfs/Ramblin Gamblin Man.pdf                   |   Bin [31m0[m -> [32m152480[m bytes
+ src/pdfs/Runnin Down A Dream.pdf                   |   Bin [31m0[m -> [32m126777[m bytes
+ src/pdfs/SHAKEDOWN STREET.pdf                      |   Bin [31m0[m -> [32m93925[m bytes
+ src/pdfs/SILVIO.pdf                                |   Bin [31m0[m -> [32m173738[m bytes
+ src/pdfs/SO MANY ROADS.pdf                         |   Bin [31m0[m -> [32m92417[m bytes
+ src/pdfs/ST Stephen.pdf                            |   Bin [31m0[m -> [32m122106[m bytes
+ src/pdfs/SWEET HOME ALABAMA.pdf                    |   Bin [31m0[m -> [32m21460[m bytes
+ src/pdfs/Sampson & Delilah.pdf                     |   Bin [31m0[m -> [32m171787[m bytes
+ src/pdfs/Santa Monica.pdf                          |   Bin [31m0[m -> [32m105932[m bytes
+ src/pdfs/Say It Aint So.pdf                        |   Bin [31m0[m -> [32m11090[m bytes
+ src/pdfs/Scarlet Begonias.pdf                      |   Bin [31m0[m -> [32m172319[m bytes
+ src/pdfs/Send Me On My Way.pdf                     |   Bin [31m0[m -> [32m30250[m bytes
+ src/pdfs/Skies Of Gold.pdf                         |   Bin [31m0[m -> [32m27444[m bytes
+ src/pdfs/Southern Cross.pdf                        |   Bin [31m0[m -> [32m51658[m bytes
+ src/pdfs/Spooky.pdf                                |   Bin [31m0[m -> [32m959622[m bytes
+ src/pdfs/St James Infirmary Blues.pdf              |   Bin [31m0[m -> [32m77120[m bytes
+ src/pdfs/Stand By Me.pdf                           |   Bin [31m0[m -> [32m91458[m bytes
+ src/pdfs/Standing On The Moon.pdf                  |   Bin [31m0[m -> [32m150822[m bytes
+ src/pdfs/Started loving the lake today.pdf         |   Bin [31m0[m -> [32m84483[m bytes
+ src/pdfs/Starting Over.pdf                         |   Bin [31m0[m -> [32m9594[m bytes
+ src/pdfs/Sugar Magnolia (K).pdf                    |   Bin [31m0[m -> [32m62469[m bytes
+ src/pdfs/Sugar Magnolia.pdf                        |   Bin [31m0[m -> [32m70979[m bytes
+ src/pdfs/Sugaree.pdf                               |   Bin [31m0[m -> [32m86234[m bytes
+ src/pdfs/Summer Of 69.pdf                          |   Bin [31m0[m -> [32m10953[m bytes
+ src/pdfs/Sundown (Band).pdf                        |   Bin [31m0[m -> [32m86248[m bytes
+ src/pdfs/Sundown.pdf                               |   Bin [31m0[m -> [32m86967[m bytes
+ src/pdfs/Susie-Q.pdf                               |   Bin [31m0[m -> [32m9259[m bytes
+ src/pdfs/THE WEIGHT.pdf                            |   Bin [31m0[m -> [32m61424[m bytes
+ src/pdfs/Take It Easy.pdf                          |   Bin [31m0[m -> [32m65632[m bytes
+ src/pdfs/Take Me Home Country Roads.pdf            |   Bin [31m0[m -> [32m60110[m bytes
+ src/pdfs/Tampico Trauma001.pdf                     |   Bin [31m0[m -> [32m392090[m bytes
+ src/pdfs/Tennessee Jed.pdf                         |   Bin [31m0[m -> [32m52209[m bytes
+ src/pdfs/Terrapin Station.pdf                      |   Bin [31m0[m -> [32m162850[m bytes
+ src/pdfs/The Ballad Of Curtis Loew.pdf             |   Bin [31m0[m -> [32m105739[m bytes
+ src/pdfs/The Crushing Weight of Nothing.pdf        |   Bin [31m0[m -> [32m605988[m bytes
+ src/pdfs/The Joker.pdf                             |   Bin [31m0[m -> [32m85879[m bytes
+ src/pdfs/The Mighty Quinn.pdf                      |   Bin [31m0[m -> [32m67939[m bytes
+ src/pdfs/The Other One.pdf                         |   Bin [31m0[m -> [32m9324[m bytes
+ src/pdfs/The Wheel.pdf                             |   Bin [31m0[m -> [32m62808[m bytes
+ src/pdfs/They Love Each Other.pdf                  |   Bin [31m0[m -> [32m109541[m bytes
+ src/pdfs/Throwing Stones Revised.pdf               |   Bin [31m0[m -> [32m1710883[m bytes
+ src/pdfs/Toes.pdf                                  |   Bin [31m0[m -> [32m30675[m bytes
+ src/pdfs/Touch Of Grey.pdf                         |   Bin [31m0[m -> [32m134429[m bytes
+ src/pdfs/Truckin.pdf                               |   Bin [31m0[m -> [32m229472[m bytes
+ src/pdfs/Two Princes.pdf                           |   Bin [31m0[m -> [32m55367[m bytes
+ src/pdfs/Two Tickets To Paradise.pdf               |   Bin [31m0[m -> [32m82699[m bytes
+ src/pdfs/US Blues.pdf                              |   Bin [31m0[m -> [32m96954[m bytes
+ src/pdfs/Uncle Johns Band.pdf                      |   Bin [31m0[m -> [32m156331[m bytes
+ src/pdfs/Underneath The Bridge.pdf                 |   Bin [31m0[m -> [32m65817[m bytes
+ src/pdfs/Up On Cripple Creek.pdf                   |   Bin [31m0[m -> [32m12169[m bytes
+ src/pdfs/Used To Love Her.pdf                      |   Bin [31m0[m -> [32m152521[m bytes
+ src/pdfs/Viola Lee Blues.pdf                       |   Bin [31m0[m -> [32m52419[m bytes
+ src/pdfs/WHAT I GOT.pdf                            |   Bin [31m0[m -> [32m25511[m bytes
+ src/pdfs/Wagon Wheel.pdf                           |   Bin [31m0[m -> [32m12056[m bytes
+ src/pdfs/Watch Tower.pdf                           |   Bin [31m0[m -> [32m23409[m bytes
+ src/pdfs/West La Fadeaway.pdf                      |   Bin [31m0[m -> [32m160794[m bytes
+ src/pdfs/Wharf Rat001.pdf                          |   Bin [31m0[m -> [32m404365[m bytes
+ src/pdfs/What Its Like.pdf                         |   Bin [31m0[m -> [32m107047[m bytes
+ src/pdfs/Whats My Age Again.pdf                    |   Bin [31m0[m -> [32m51371[m bytes
+ src/pdfs/You Cant Always Get What You Want.pdf     |   Bin [31m0[m -> [32m156452[m bytes
+ src/pdfs/You Dont Call Me By My Name.pdf           |   Bin [31m0[m -> [32m25692[m bytes
+ src/pdfs/Your Song.pdf                             |   Bin [31m0[m -> [32m46171[m bytes
+ src/pdfs/aint no bread in the breadbox.pdf         |   Bin [31m0[m -> [32m397091[m bytes
+ src/pdfs/iko iko chords (1).pdf                    |   Bin [31m0[m -> [32m190083[m bytes
+ src/pdfs/ive been all around this world chords.pdf |   Bin [31m0[m -> [32m219262[m bytes
+ src/pdfs/join together.pdf                         |   Bin [31m0[m -> [32m178674[m bytes
+ src/pdfs/lyin eyes chords.pdf                      |   Bin [31m0[m -> [32m309852[m bytes
+ src/pdfs/rodeo chords.pdf                          |   Bin [31m0[m -> [32m236720[m bytes
+ src/reportWebVitals.js                             |    13 [32m+[m
+ src/setupTests.js                                  |     5 [32m+[m
+ ...p-794b9-firebase-adminsdk-fbsvc-cec2b7b59e.json |    13 [32m+[m
+ src/songs-with-urls.json                           |  1506 [32m++[m
+ src/songs.json                                     |   190 [32m+[m
+ src/upload-songs.js                                |    31 [32m+[m
+ src/uploadPdfs.js                                  |    52 [32m+[m
+ storage.rules                                      |    20 [32m+[m
+ throwaway/.gitignore                               |     2 [32m+[m
+ throwaway/index.js                                 |    19 [32m+[m
+ throwaway/package.json                             |    23 [32m+[m
+ 254 files changed, 34543 insertions(+)
