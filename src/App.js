@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  collection,
+  doc,
   getDocs,
   addDoc,
   deleteDoc,
+  query,
+  orderBy,
+  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -11,7 +16,7 @@ import { PDFDocument } from "pdf-lib";
 import Select from "react-select";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
 import Login from "./login";
 import {
   resolveTenantContext,
@@ -21,6 +26,9 @@ import {
   tenantStoragePath,
 } from "./tenantContext";
 import { createBandForUser, joinBandForUser } from "./bandMembershipService";
+import HeaderBar from "./components/HeaderBar";
+import NavTabs from "./components/NavTabs";
+import SelectionBar from "./components/SelectionBar";
 import './App.css';
 
 const keyOptions = [
@@ -170,6 +178,10 @@ function App() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [codeCopied, setCodeCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState("songs");
+  const [setlists, setSetlists] = useState([]);
+  const [isSetlistsLoading, setIsSetlistsLoading] = useState(false);
+  const [setlistsError, setSetlistsError] = useState("");
 
   const refreshTenantContext = async (currentUser, firestoreData = null) => {
     const resolvedTenant = await resolveTenantContext(currentUser.uid, firestoreData || {});
@@ -487,54 +499,6 @@ function App() {
     }
   };
 
-  // ── Save playlist to Firestore ────────────────────────────────────────────
-  const handleSavePlaylist = async () => {
-    if (selectedSongs.length === 0) {
-      alert("Please select at least one song to save the playlist.");
-      return;
-    }
-    const formattedDate = new Date().toISOString().split("T")[0];
-    try {
-      const tenant = requireTenantBandContext(tenantContext);
-      const mergedPdf = await PDFDocument.create();
-      for (const songId of selectedSongs) {
-        const song = songs.find((s) => s.id === songId);
-        if (!song) continue;
-        const resolvedUrl = await resolveSongPdfUrl(song);
-        const pdfBytes = await fetch(resolvedUrl).then((res) => {
-          if (!res.ok) throw new Error(`Failed to fetch PDF for ${song.title}`);
-          return res.arrayBuffer();
-        });
-        const pdf = await PDFDocument.load(pdfBytes);
-        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-        copiedPages.forEach((page) => mergedPdf.addPage(page));
-      }
-      const mergedPdfBytes = await mergedPdf.save();
-      const blob = new Blob([mergedPdfBytes], { type: "application/pdf" });
-
-      const storageRef = ref(
-        storage,
-        tenantStoragePath(tenant, "playlists", `Playlist-${formattedDate}.pdf`)
-      );
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
-
-      const newPlaylist = {
-        title: `Playlist - ${formattedDate}`,
-        artist: activeBandName || "Band",
-        key: "C",
-        decade: "20s",
-        pdfUrl: downloadURL,
-      };
-      const docRef = await addDoc(tenantSongsCollectionRef(tenant), newPlaylist);
-      setSongs((prev) => [...prev, { id: docRef.id, ...newPlaylist }]);
-      alert("Playlist saved successfully!");
-    } catch (err) {
-      console.error("Error saving playlist:", err);
-      alert("Failed to save the playlist. Please try again.");
-    }
-  };
-
   const moveSongUp = (id) => {
     const index = selectedSongs.indexOf(id);
     if (index > 0) {
@@ -587,131 +551,175 @@ function App() {
 
   const clearPlaylist = () => setSelectedSongs([]);
 
+  const fetchSetlists = useCallback(async () => {
+    if (!user || !tenantContext?.bandId) return;
+    setIsSetlistsLoading(true);
+    setSetlistsError("");
+
+    try {
+      const tenant = requireTenantBandContext(tenantContext);
+      const setlistsRef = collection(db, "bands", tenant.bandId, "setlists");
+      const snap = await getDocs(query(setlistsRef, orderBy("createdAt", "desc")));
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setSetlists(rows);
+    } catch (err) {
+      console.error("Error fetching setlists:", err);
+      setSetlistsError("Could not load setlists.");
+    } finally {
+      setIsSetlistsLoading(false);
+    }
+  }, [user, tenantContext]);
+
+  useEffect(() => {
+    fetchSetlists();
+  }, [fetchSetlists]);
+
+  const handleSaveSetlist = async () => {
+    if (selectedSongs.length === 0) {
+      alert("Select at least one song before saving a setlist.");
+      return;
+    }
+
+    const proposedName = `Setlist ${new Date().toISOString().split("T")[0]}`;
+    const name = window.prompt("Setlist name", proposedName)?.trim();
+    if (!name) return;
+
+    try {
+      const tenant = requireTenantBandContext(tenantContext);
+      const setlistsRef = collection(db, "bands", tenant.bandId, "setlists");
+      await addDoc(setlistsRef, {
+        name,
+        songIds: selectedSongs,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+      });
+      await fetchSetlists();
+      setActiveTab("setlists");
+    } catch (err) {
+      console.error("Error saving setlist:", err);
+      alert("Could not save setlist. Please try again.");
+    }
+  };
+
+  const handleLoadSetlist = (songIds = []) => {
+    if (!Array.isArray(songIds) || songIds.length === 0) {
+      alert("This setlist has no songs.");
+      return;
+    }
+
+    const availableSongIds = new Set(songs.map((song) => song.id));
+    const filteredSongIds = songIds.filter((id) => availableSongIds.has(id));
+    if (filteredSongIds.length === 0) {
+      alert("None of the songs in this setlist are currently available.");
+      return;
+    }
+
+    setSelectedSongs(filteredSongIds);
+    setActiveTab("songs");
+  };
+
+  const handleDeleteSetlist = async (setlistId) => {
+    if (userRole !== "admin") {
+      alert("Only band admins can delete setlists.");
+      return;
+    }
+
+    if (!window.confirm("Delete this setlist?")) return;
+
+    try {
+      const tenant = requireTenantBandContext(tenantContext);
+      await deleteDoc(doc(db, "bands", tenant.bandId, "setlists", setlistId));
+      await fetchSetlists();
+    } catch (err) {
+      console.error("Error deleting setlist:", err);
+      alert("Could not delete setlist. Please try again.");
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const appShell = (
     <div
-      className="App"
-      style={{
-        backgroundImage: `url('/setlistgoblin.png')`,
-        backgroundSize: "620px 420px",
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "top",
-      }}
+      className="App min-h-screen bg-base text-text-primary"
     >
-      <header
-        className="App-header"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          padding: "10px",
-          gap: "12px",
-          backgroundColor: "rgba(255,255,255,0)",
-          flexWrap: "wrap",
-        }}
-      >
-        <h1 style={{ fontSize: "1.5rem", margin: 0 }}>Setlist Goblin</h1>
-
-        {/* Band name + invite code */}
-        {activeBandName && (
-          <span style={{ fontSize: "0.85rem", color: "#aaa" }}>
-            {activeBandName}
-          </span>
-        )}
-        {activeBandId && (
-          <button
-            onClick={handleCopyCode}
-            title="Copy invite code"
-            style={{
-              fontSize: "0.75rem",
-              letterSpacing: "0.15em",
-              padding: "4px 10px",
-              background: codeCopied ? "#2a5a2a" : "#1a1a1a",
-              color: codeCopied ? "#70c080" : "#c8a84b",
-              border: "1px solid #333",
-              borderRadius: "3px",
-              cursor: "pointer",
-            }}
-          >
-            {codeCopied ? "Copied!" : `Code: ${activeBandId}`}
-          </button>
-        )}
-
-        <button onClick={handleLogout}>Logout</button>
-        {error && <p style={{ color: "red", margin: 0 }}>{error}</p>}
-      </header>
+      <HeaderBar
+        activeBandName={activeBandName}
+        activeBandId={activeBandId}
+        codeCopied={codeCopied}
+        onCopyCode={handleCopyCode}
+        onLogout={handleLogout}
+        error={error}
+      />
 
       <main>
-        {/* Search Section */}
-        <section style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "40px" }}>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: "50px" }}>
-            <input
-              type="text"
-              placeholder="Search songs..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ padding: "15px", width: "200px", fontSize: "1.2rem", marginTop: "200px" }}
-            />
-            <button
-              onClick={() => setSearchTerm("")}
-              style={{ marginLeft: "10px", padding: "10px 20px", fontSize: "1.2rem", marginTop: "200px" }}
-            >
-              Clear
-            </button>
-          </div>
+        <NavTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-          {/* Button Row */}
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
-            {selectedSongs.length > 0 && (
-              <button onClick={clearPlaylist} style={{ backgroundColor: "#DC143C", color: "white" }}>
-                Clear Playlist
-              </button>
-            )}
-            <button onClick={() => setIsFormVisible(!isFormVisible)}>
-              {isFormVisible ? "Hide Add Song Form" : "Add a New Song"}
-            </button>
-            {songs.length > 0 && (
-              <button onClick={generateRandomSelection}>Generate Random Playlist</button>
-            )}
-            {selectedSongs.length > 0 && (
-              <button
-                onClick={mergePDFs}
-                disabled={isLoading}
-                style={{ backgroundColor: "#28a745", color: "white" }}
-              >
-                {isLoading ? "Building…" : "Download Playlist PDF"}
-              </button>
-            )}
-            <button onClick={handleSavePlaylist} style={{ backgroundColor: "#0078d4", color: "white" }}>
-              Save Playlist
-            </button>
-          </div>
+        {activeTab === "songs" && (
+          <>
+        {/* Toolbar */}
+        <section className="flex flex-wrap items-center gap-2.5 border-b border-border px-4 py-3">
+          <input
+            type="text"
+            placeholder="Search songs..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-[220px]"
+          />
+          <button onClick={() => setSearchTerm("")}>Clear</button>
+
+          <div className="flex-1" />
+
+          <button onClick={() => setIsFormVisible(!isFormVisible)}>
+            {isFormVisible ? "Hide Form" : "+ Add Song"}
+          </button>
+          {songs.length > 0 && (
+            <button onClick={generateRandomSelection}>Random</button>
+          )}
         </section>
+
+        {/* Selection bar — only shows when songs are selected */}
+        {selectedSongs.length > 0 && (
+          <SelectionBar
+            selectedCount={selectedSongs.length}
+            onClear={clearPlaylist}
+            onDownload={mergePDFs}
+            isLoading={isLoading}
+            onSave={handleSaveSetlist}
+            onLiveMode={() => setActiveTab("live")}
+          />
+        )}
 
         {/* Form Section */}
         {isFormVisible && (
-          <section>
-            <h2>{editingSongId ? "Edit Song" : "Add a New Song"}</h2>
-            <form onSubmit={handleAddOrUpdateSong} className="song-form">
-              <div className="form-group">
-                <label htmlFor="title">Title:</label>
+          <section className="mx-auto my-4 w-full max-w-2xl px-4">
+            <h2 className="mb-3 text-sm font-medium text-text-primary">{editingSongId ? "Edit Song" : "Add a New Song"}</h2>
+            <form onSubmit={handleAddOrUpdateSong} className="rounded-md border border-border bg-surface p-4">
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="title">Title:</label>
                 <input
-                  type="text" id="title" name="title"
-                  value={newSong.title} onChange={handleInputChange}
-                  placeholder="Enter song title" required
+                  className="w-full"
+                  type="text"
+                  id="title"
+                  name="title"
+                  value={newSong.title}
+                  onChange={handleInputChange}
+                  placeholder="Enter song title"
+                  required
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="key">Key:</label>
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="key">Key:</label>
                 <Select
-                  id="key" name="key" options={keyOptions}
+                  id="key"
+                  name="key"
+                  options={keyOptions}
                   value={keyOptions.find((o) => o.value === newSong.key)}
                   onChange={(opt) => setNewSong((prev) => ({ ...prev, key: opt.value }))}
                   placeholder="Select a key"
+                  classNamePrefix="react-select"
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="decade">Decade:</label>
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="decade">Decade:</label>
                 <select id="decade" name="decade" value={newSong.decade} onChange={handleInputChange} required>
                   <option value="" disabled>Select a decade</option>
                   {["50s","60s","70s","80s","90s","00s","10s","20s"].map((d) => (
@@ -719,24 +727,34 @@ function App() {
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label htmlFor="artist">Artist:</label>
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="artist">Artist:</label>
                 <input
-                  type="text" id="artist" name="artist"
-                  value={newSong.artist} onChange={handleInputChange}
-                  placeholder="Enter artist name" required
+                  className="w-full"
+                  type="text"
+                  id="artist"
+                  name="artist"
+                  value={newSong.artist}
+                  onChange={handleInputChange}
+                  placeholder="Enter artist name"
+                  required
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="pdf">Upload PDF:</label>
+              <div className="mb-4 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="pdf">Upload PDF:</label>
                 <input
-                  type="file" id="pdf" accept=".pdf"
+                  className="w-full"
+                  type="file"
+                  id="pdf"
+                  accept=".pdf"
                   onChange={(e) => handleFileUpload(e.target.files[0])}
                 />
-                {uploadedFileName && <p>Uploaded File: {uploadedFileName}</p>}
+                {uploadedFileName && <p className="text-xs text-text-secondary">Uploaded File: {uploadedFileName}</p>}
               </div>
-              <div className="form-group">
-                <button type="submit">{editingSongId ? "Update Song" : "Add Song"}</button>
+              <div>
+                <button type="submit" className="border-transparent bg-accent text-white hover:bg-accent/85">
+                  {editingSongId ? "Update Song" : "Add Song"}
+                </button>
               </div>
             </form>
           </section>
@@ -744,16 +762,16 @@ function App() {
 
         {/* Selected Songs */}
         {selectedSongs.length > 0 && (
-          <section>
-            <h2 style={{ textAlign: "center" }}>Selected Songs</h2>
-            <ul>
+          <section className="mx-auto my-4 w-full max-w-4xl px-4">
+            <h2 className="mb-2 text-center text-sm font-medium text-text-primary">Selected Songs</h2>
+            <ul className="space-y-1.5">
               {selectedSongs.map((id) => {
                 const song = songs.find((s) => s.id === id);
                 if (!song) return null;
                 return (
-                  <li key={id}>
-                    <div className="song-details">{song.title} - {song.artist}</div>
-                    <div className="song-buttons">
+                  <li key={id} className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-2">
+                    <div className="text-sm font-medium text-text-primary">{song.title} - {song.artist}</div>
+                    <div className="flex gap-1.5">
                       <button onClick={() => moveSongUp(id)}>Move Up</button>
                       <button onClick={() => moveSongDown(id)}>Move Down</button>
                     </div>
@@ -765,41 +783,43 @@ function App() {
         )}
 
         {/* Song List */}
-        <section>
-          <table>
-            <thead>
-              <tr>
-                <th>Select</th>
-                <th onClick={() => handleSort("title")} style={{ cursor: "pointer" }}>
+        <section className="px-4 pb-8">
+          <div className="overflow-x-auto rounded-md border border-border bg-base">
+          <table className="w-full table-fixed border-collapse">
+            <thead className="bg-surface">
+              <tr className="border-b border-border">
+                <th className="w-10 px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
+                <th onClick={() => handleSort("title")} className="cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Title {sortConfig.key === "title" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th onClick={() => handleSort("artist")} style={{ cursor: "pointer" }}>
+                <th onClick={() => handleSort("artist")} className="cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Artist {sortConfig.key === "artist" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th onClick={() => handleSort("key")} style={{ cursor: "pointer", width: "25px", textAlign: "left", paddingLeft: "8px" }}>
+                <th onClick={() => handleSort("key")} className="w-[60px] cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Key {sortConfig.key === "key" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th onClick={() => handleSort("decade")} style={{ cursor: "pointer", width: "60px", textAlign: "left", paddingLeft: "8px" }}>
-                  Decade {sortConfig.key === "decade" && (sortConfig.direction === "asc" ? "↑" : "↓")}
+                <th onClick={() => handleSort("decade")} className="w-[80px] cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
+                  Era {sortConfig.key === "decade" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th style={{ textAlign: "center" }}>Actions</th>
+                <th className="w-[180px] px-2 py-2 text-center text-[11px] uppercase tracking-wide text-text-secondary">Actions</th>
               </tr>
             </thead>
             <tbody>
               {(searchTerm.trim() ? filteredSongs : sortedSongs).map((song) => (
-                <tr key={song.id}>
-                  <td>
+                <tr key={song.id} className="border-b border-border/70 hover:bg-surface/70">
+                  <td className="px-2 py-2">
                     <input
                       type="checkbox"
+                      className="h-4 w-4 accent-accent"
                       checked={selectedSongs.includes(song.id)}
                       onChange={(e) => handleSelectSong(song.id, e.target.checked)}
                     />
                   </td>
-                  <td>{song.title}</td>
-                  <td>{song.artist}</td>
-                  <td>{song.key}</td>
-                  <td>{song.decade}</td>
-                  <td>
+                  <td className="px-2 py-2 text-sm text-text-primary">{song.title}</td>
+                  <td className="px-2 py-2 text-sm text-text-primary">{song.artist}</td>
+                  <td className="px-2 py-2 text-sm text-text-secondary">{song.key}</td>
+                  <td className="px-2 py-2 text-sm text-text-secondary">{song.decade}</td>
+                  <td className="px-2 py-2 text-center">
                     <button
                       onClick={async () => {
                         const pdfTab = window.open("about:blank", "_blank");
@@ -826,17 +846,17 @@ function App() {
                           alert("Could not open this PDF. This song is missing a valid PDF URL. Edit the song and upload the PDF again.");
                         }
                       }}
-                      style={{ backgroundColor: "#007BFF", color: "white", marginRight: "10px" }}
+                      className="mr-2 border-transparent bg-accent px-2.5 text-white hover:bg-accent/85"
                     >
                       OPEN
                     </button>
-                    <button onClick={() => handleEditSong(song)} style={{ marginRight: "11px" }}>
+                    <button onClick={() => handleEditSong(song)} className="mr-2 px-2.5">
                       Edit
                     </button>
                     {userRole === "admin" && (
                       <button
                         onClick={() => handleDeleteSong(song.id)}
-                        style={{ color: "red", width: "60px", textAlign: "left", paddingLeft: "5px" }}
+                        className="border-danger/30 px-2.5 text-danger"
                       >
                         Delete
                       </button>
@@ -846,22 +866,108 @@ function App() {
               ))}
               {filteredSongs.length === 0 && searchTerm.trim() !== "" && (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: "center" }}>
+                  <td colSpan="6" className="px-2 py-5 text-center text-sm text-text-secondary">
                     No songs found matching your search criteria.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
         </section>
+          </>
+        )}
+
+        {activeTab === "setlists" && (
+          <section className="px-4 py-6">
+            <div className="rounded-md border border-border bg-surface p-4">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-medium text-text-primary">Setlists</h2>
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={handleSaveSetlist}
+                  disabled={selectedSongs.length === 0}
+                  className="border-transparent bg-accent text-white hover:bg-accent/85"
+                >
+                  Save Current Selection
+                </button>
+              </div>
+
+              {setlistsError && (
+                <p className="mb-3 text-sm text-danger">{setlistsError}</p>
+              )}
+
+              {isSetlistsLoading ? (
+                <p className="text-sm text-text-secondary">Loading setlists...</p>
+              ) : setlists.length === 0 ? (
+                <p className="text-sm text-text-secondary">No saved setlists yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {setlists.map((setlist) => {
+                    const createdLabel =
+                      setlist?.createdAt?.toDate
+                        ? setlist.createdAt.toDate().toLocaleDateString()
+                        : "Unknown date";
+                    const songCount = Array.isArray(setlist.songIds) ? setlist.songIds.length : 0;
+
+                    return (
+                      <li
+                        key={setlist.id}
+                        className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-base px-3 py-2"
+                      >
+                        <div className="min-w-[180px] flex-1">
+                          <p className="text-sm font-medium text-text-primary">{setlist.name || "Untitled setlist"}</p>
+                          <p className="text-xs text-text-secondary">
+                            {songCount} song{songCount === 1 ? "" : "s"} • {createdLabel}
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => handleLoadSetlist(setlist.songIds || [])}>
+                          Load
+                        </button>
+                        {userRole === "admin" && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSetlist(setlist.id)}
+                            className="border-danger/30 text-danger"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </section>
+        )}
+
+        {activeTab === "live" && (
+          <section className="px-4 py-6">
+            <div className="rounded-md border border-border bg-surface p-4">
+              <h2 className="mb-2 text-sm font-medium text-text-primary">Live Mode</h2>
+              <p className="text-sm text-text-secondary">Fullscreen per-song PDF view will be wired in the next feature slice.</p>
+            </div>
+          </section>
+        )}
+
+        {activeTab === "members" && (
+          <section className="px-4 py-6">
+            <div className="rounded-md border border-border bg-surface p-4">
+              <h2 className="mb-2 text-sm font-medium text-text-primary">Members</h2>
+              <p className="text-sm text-text-secondary">Member roster and admin actions are queued for next implementation slices.</p>
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );
 
   if (!isAppReady) {
     return (
-      <div style={{ padding: "40px", textAlign: "center", fontFamily: "Georgia, serif" }}>
-        <h2>Loading your band...</h2>
+      <div className="flex min-h-screen items-center justify-center bg-base px-6">
+        <h2 className="text-sm font-medium text-text-secondary">Loading your band...</h2>
       </div>
     );
   }
