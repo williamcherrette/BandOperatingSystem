@@ -656,7 +656,7 @@ function App() {
         {activeTab === "songs" && (
           <>
         {/* Toolbar */}
-        <section className="flex flex-wrap items-center gap-2.5 border-b border-border px-4 py-3">
+            <section className="flex items-center gap-2.5 border-b border-border px-4 py-3">
               <input
                 type="text"
                 placeholder="Search songs..."
@@ -827,10 +827,8 @@ function App() {
                           alert("Popup blocked. Please allow popups for this site to open PDFs in a new tab.");
                           return;
                         }
-
                         pdfTab.document.title = "Opening PDF...";
                         pdfTab.document.body.innerHTML = "<p style='font-family:Georgia,serif;padding:24px;'>Loading PDF...</p>";
-
                         try {
                           const resolvedUrl = await resolveSongPdfUrl(song);
                           if (!resolvedUrl) throw new Error("No resolved URL available");
@@ -843,24 +841,31 @@ function App() {
                             return;
                           }
                           pdfTab.close();
-                          alert("Could not open this PDF. This song is missing a valid PDF URL. Edit the song and upload the PDF again.");
+                          alert("Could not open this PDF.");
                         }
                       }}
-                      className="mr-2 border-accent/30 px-2.5 text-accent hover:bg-accent/10"
+                      style={{
+                        color: "#2563eb",
+                        borderColor: "rgba(37,99,235,0.3)",
+                        background: "transparent",
+                        marginRight: "6px"
+                      }}
                     >
-                      OPEN
+                      Open
                     </button>
                     <button onClick={() => handleEditSong(song)} className="mr-2 px-2.5">
                       Edit
-                    </button>
-                    {userRole === "admin" && (
                       <button
                         onClick={() => handleDeleteSong(song.id)}
-                        className="border-danger/30 px-2.5 text-danger"
+                        style={{
+                          color: "#a0a09a",
+                          borderColor: "#2e2e2c",
+                          background: "transparent"
+                        }}
                       >
                         Delete
                       </button>
-                    )}
+                    </button>
                   </td>
                 </tr>
               ))}
