@@ -44,5 +44,7 @@ jobs:
       - name: Install Firebase Tools
         run: npm install -g firebase-tools
 
-      - name: Deploy to Firebase
+- name: Deploy to Firebase
         run: firebase deploy --only hosting,firestore:rules,functions --project ${{ secrets.DEV_FIREBASE_PROJECT_ID }} --token "${{ secrets.DEV_FIREBASE_TOKEN }}" --non-interactive
+        env:
+          FIREBASE_HOSTING_SITE: band-os-dev
