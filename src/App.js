@@ -398,7 +398,7 @@ function App() {
   // ── Add / Update song ─────────────────────────────────────────────────────
   const handleAddOrUpdateSong = async (e) => {
     e.preventDefault();
-    if (!newSong.title || !newSong.key || !newSong.decade || !newSong.artist || !newSong.pdfUrl) {
+    if (!newSong.title || !newSong.key || !newSong.decade || !newSong.artist) {
       setError("All fields are required!");
       return;
     }
@@ -657,13 +657,13 @@ function App() {
           <>
         {/* Toolbar */}
         <section className="flex flex-wrap items-center gap-2.5 border-b border-border px-4 py-3">
-          <input
-            type="text"
-            placeholder="Search songs..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-[220px]"
-          />
+              <input
+                type="text"
+                placeholder="Search songs..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-48"
+              />
           <button onClick={() => setSearchTerm("")}>Clear</button>
 
           <div className="flex-1" />
@@ -788,7 +788,7 @@ function App() {
           <table className="w-full table-fixed border-collapse">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="w-10 px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
+                <th className="w-12 px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
                 <th onClick={() => handleSort("title")} className="cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Title {sortConfig.key === "title" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
@@ -846,7 +846,7 @@ function App() {
                           alert("Could not open this PDF. This song is missing a valid PDF URL. Edit the song and upload the PDF again.");
                         }
                       }}
-                      className="mr-2 border-transparent bg-accent px-2.5 text-white hover:bg-accent/85"
+                      className="mr-2 border-accent/30 px-2.5 text-accent hover:bg-accent/10"
                     >
                       OPEN
                     </button>
