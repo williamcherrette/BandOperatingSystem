@@ -669,7 +669,7 @@ function App() {
           <div className="flex-1" />
 
           <button onClick={() => setIsFormVisible(!isFormVisible)}>
-            {isFormVisible ? "Hide Form" : "+ Add Song"}
+            {isFormVisible ? "Hide Form" : "+ Add"}
           </button>
           {songs.length > 0 && (
             <button onClick={generateRandomSelection}>Random</button>
@@ -788,7 +788,7 @@ function App() {
           <table className="w-full table-fixed border-collapse">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="w-12 px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
+                <th className="w-16 px-3 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
                 <th onClick={() => handleSort("title")} className="cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Title {sortConfig.key === "title" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
@@ -819,53 +819,48 @@ function App() {
                   <td className="px-2 py-2 text-sm text-text-primary">{song.artist}</td>
                   <td className="px-2 py-2 text-sm text-text-secondary">{song.key}</td>
                   <td className="px-2 py-2 text-sm text-text-secondary">{song.decade}</td>
-                  <td className="px-2 py-2 text-center">
-                    <button
-                      onClick={async () => {
-                        const pdfTab = window.open("about:blank", "_blank");
-                        if (!pdfTab) {
-                          alert("Popup blocked. Please allow popups for this site to open PDFs in a new tab.");
-                          return;
-                        }
-                        pdfTab.document.title = "Opening PDF...";
-                        pdfTab.document.body.innerHTML = "<p style='font-family:Georgia,serif;padding:24px;'>Loading PDF...</p>";
-                        try {
-                          const resolvedUrl = await resolveSongPdfUrl(song);
-                          if (!resolvedUrl) throw new Error("No resolved URL available");
-                          pdfTab.location.replace(resolvedUrl);
-                        } catch (err) {
-                          console.error("Error opening PDF:", err);
-                          const fallbackUrl = song?.pdfUrl || song?.pdfPath || "";
-                          if (fallbackUrl) {
-                            pdfTab.location.replace(fallbackUrl);
+                  <td className="px-2 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={async () => {
+                          const pdfTab = window.open("about:blank", "_blank");
+                          if (!pdfTab) {
+                            alert("Popup blocked. Please allow popups for this site to open PDFs in a new tab.");
                             return;
                           }
-                          pdfTab.close();
-                          alert("Could not open this PDF.");
-                        }
-                      }}
-                      style={{
-                        color: "#2563eb",
-                        borderColor: "rgba(37,99,235,0.3)",
-                        background: "transparent",
-                        marginRight: "6px"
-                      }}
-                    >
-                      Open
-                    </button>
-                    <button onClick={() => handleEditSong(song)} className="mr-2 px-2.5">
-                      Edit
-                      <button
-                        onClick={() => handleDeleteSong(song.id)}
-                        style={{
-                          color: "#a0a09a",
-                          borderColor: "#2e2e2c",
-                          background: "transparent"
+                          pdfTab.document.title = "Opening PDF...";
+                          pdfTab.document.body.innerHTML = "<p style='font-family:Georgia,serif;padding:24px;'>Loading PDF...</p>";
+                          try {
+                            const resolvedUrl = await resolveSongPdfUrl(song);
+                            if (!resolvedUrl) throw new Error("No resolved URL available");
+                            pdfTab.location.replace(resolvedUrl);
+                          } catch (err) {
+                            console.error("Error opening PDF:", err);
+                            const fallbackUrl = song?.pdfUrl || song?.pdfPath || "";
+                            if (fallbackUrl) {
+                              pdfTab.location.replace(fallbackUrl);
+                              return;
+                            }
+                            pdfTab.close();
+                            alert("Could not open this PDF.");
+                          }
                         }}
+                        style={{ color: "#2563eb", border: "none", background: "transparent" }}
                       >
-                        Delete
+                        Open
                       </button>
-                    </button>
+                      <button onClick={() => handleEditSong(song)}>
+                        Edit
+                      </button>
+                      {userRole === "admin" && (
+                        <button
+                          onClick={() => handleDeleteSong(song.id)}
+                          style={{ color: "#a0a09a", borderColor: "#2e2e2c", background: "transparent" }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
