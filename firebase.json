@@ -7,7 +7,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
-    "site": "band-os-dev",
+    "target": "app",
     "public": "build",
     "ignore": [
       "firebase.json",
