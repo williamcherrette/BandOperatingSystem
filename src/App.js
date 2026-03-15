@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  collection,
+  doc,
   getDocs,
   addDoc,
   deleteDoc,
+  query,
+  orderBy,
+  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -11,7 +16,7 @@ import { PDFDocument } from "pdf-lib";
 import Select from "react-select";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
 import Login from "./login";
 import {
   resolveTenantContext,
@@ -21,6 +26,9 @@ import {
   tenantStoragePath,
 } from "./tenantContext";
 import { createBandForUser, joinBandForUser } from "./bandMembershipService";
+import HeaderBar from "./components/HeaderBar";
+import NavTabs from "./components/NavTabs";
+import SelectionBar from "./components/SelectionBar";
 import './App.css';
 
 const keyOptions = [
@@ -171,6 +179,9 @@ function App() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [codeCopied, setCodeCopied] = useState(false);
   const [activeTab, setActiveTab] = useState("songs");
+  const [setlists, setSetlists] = useState([]);
+  const [isSetlistsLoading, setIsSetlistsLoading] = useState(false);
+  const [setlistsError, setSetlistsError] = useState("");
 
   const refreshTenantContext = async (currentUser, firestoreData = null) => {
     const resolvedTenant = await resolveTenantContext(currentUser.uid, firestoreData || {});
@@ -488,54 +499,6 @@ function App() {
     }
   };
 
-  // ── Save playlist to Firestore ────────────────────────────────────────────
-  const handleSavePlaylist = async () => {
-    if (selectedSongs.length === 0) {
-      alert("Please select at least one song to save the playlist.");
-      return;
-    }
-    const formattedDate = new Date().toISOString().split("T")[0];
-    try {
-      const tenant = requireTenantBandContext(tenantContext);
-      const mergedPdf = await PDFDocument.create();
-      for (const songId of selectedSongs) {
-        const song = songs.find((s) => s.id === songId);
-        if (!song) continue;
-        const resolvedUrl = await resolveSongPdfUrl(song);
-        const pdfBytes = await fetch(resolvedUrl).then((res) => {
-          if (!res.ok) throw new Error(`Failed to fetch PDF for ${song.title}`);
-          return res.arrayBuffer();
-        });
-        const pdf = await PDFDocument.load(pdfBytes);
-        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-        copiedPages.forEach((page) => mergedPdf.addPage(page));
-      }
-      const mergedPdfBytes = await mergedPdf.save();
-      const blob = new Blob([mergedPdfBytes], { type: "application/pdf" });
-
-      const storageRef = ref(
-        storage,
-        tenantStoragePath(tenant, "playlists", `Playlist-${formattedDate}.pdf`)
-      );
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
-
-      const newPlaylist = {
-        title: `Playlist - ${formattedDate}`,
-        artist: activeBandName || "Band",
-        key: "C",
-        decade: "20s",
-        pdfUrl: downloadURL,
-      };
-      const docRef = await addDoc(tenantSongsCollectionRef(tenant), newPlaylist);
-      setSongs((prev) => [...prev, { id: docRef.id, ...newPlaylist }]);
-      alert("Playlist saved successfully!");
-    } catch (err) {
-      console.error("Error saving playlist:", err);
-      alert("Failed to save the playlist. Please try again.");
-    }
-  };
-
   const moveSongUp = (id) => {
     const index = selectedSongs.indexOf(id);
     if (index > 0) {
@@ -588,72 +551,107 @@ function App() {
 
   const clearPlaylist = () => setSelectedSongs([]);
 
+  const fetchSetlists = useCallback(async () => {
+    if (!user || !tenantContext?.bandId) return;
+    setIsSetlistsLoading(true);
+    setSetlistsError("");
+
+    try {
+      const tenant = requireTenantBandContext(tenantContext);
+      const setlistsRef = collection(db, "bands", tenant.bandId, "setlists");
+      const snap = await getDocs(query(setlistsRef, orderBy("createdAt", "desc")));
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setSetlists(rows);
+    } catch (err) {
+      console.error("Error fetching setlists:", err);
+      setSetlistsError("Could not load setlists.");
+    } finally {
+      setIsSetlistsLoading(false);
+    }
+  }, [user, tenantContext]);
+
+  useEffect(() => {
+    fetchSetlists();
+  }, [fetchSetlists]);
+
+  const handleSaveSetlist = async () => {
+    if (selectedSongs.length === 0) {
+      alert("Select at least one song before saving a setlist.");
+      return;
+    }
+
+    const proposedName = `Setlist ${new Date().toISOString().split("T")[0]}`;
+    const name = window.prompt("Setlist name", proposedName)?.trim();
+    if (!name) return;
+
+    try {
+      const tenant = requireTenantBandContext(tenantContext);
+      const setlistsRef = collection(db, "bands", tenant.bandId, "setlists");
+      await addDoc(setlistsRef, {
+        name,
+        songIds: selectedSongs,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+      });
+      await fetchSetlists();
+      setActiveTab("setlists");
+    } catch (err) {
+      console.error("Error saving setlist:", err);
+      alert("Could not save setlist. Please try again.");
+    }
+  };
+
+  const handleLoadSetlist = (songIds = []) => {
+    if (!Array.isArray(songIds) || songIds.length === 0) {
+      alert("This setlist has no songs.");
+      return;
+    }
+
+    const availableSongIds = new Set(songs.map((song) => song.id));
+    const filteredSongIds = songIds.filter((id) => availableSongIds.has(id));
+    if (filteredSongIds.length === 0) {
+      alert("None of the songs in this setlist are currently available.");
+      return;
+    }
+
+    setSelectedSongs(filteredSongIds);
+    setActiveTab("songs");
+  };
+
+  const handleDeleteSetlist = async (setlistId) => {
+    if (userRole !== "admin") {
+      alert("Only band admins can delete setlists.");
+      return;
+    }
+
+    if (!window.confirm("Delete this setlist?")) return;
+
+    try {
+      const tenant = requireTenantBandContext(tenantContext);
+      await deleteDoc(doc(db, "bands", tenant.bandId, "setlists", setlistId));
+      await fetchSetlists();
+    } catch (err) {
+      console.error("Error deleting setlist:", err);
+      alert("Could not delete setlist. Please try again.");
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const appShell = (
     <div
       className="App min-h-screen bg-base text-text-primary"
     >
-      <header className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-border bg-canvas px-4">
-        <span className="text-[15px] font-semibold tracking-[-0.01em] text-text-primary">
-          Band OS
-        </span>
-
-        {activeBandName && (
-          <span className="text-xs text-text-muted">
-            {activeBandName}
-          </span>
-        )}
-
-        <div className="flex-1" />
-
-        {activeBandId && (
-          <button
-            onClick={handleCopyCode}
-            title="Copy invite code"
-            className={`rounded border border-border px-2.5 py-1 text-[11px] tracking-[0.08em] ${
-              codeCopied
-                ? "bg-accent/15 text-accent"
-                : "bg-transparent text-text-muted"
-            }`}
-          >
-            {codeCopied ? "Copied!" : `Code: ${activeBandId}`}
-          </button>
-        )}
-
-        <button
-          onClick={handleLogout}
-          className="border-border text-xs text-text-muted hover:text-text-primary"
-        >
-          Logout
-        </button>
-
-        {error && (
-          <span className="text-xs text-danger">{error}</span>
-        )}
-      </header>
+      <HeaderBar
+        activeBandName={activeBandName}
+        activeBandId={activeBandId}
+        codeCopied={codeCopied}
+        onCopyCode={handleCopyCode}
+        onLogout={handleLogout}
+        error={error}
+      />
 
       <main>
-        <nav className="flex border-b border-border bg-canvas px-2">
-          {[
-            { id: "songs", label: "Songs" },
-            { id: "setlists", label: "Setlists" },
-            { id: "live", label: "Live Mode" },
-            { id: "members", label: "Members" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-none border-x-0 border-t-0 border-b-2 px-4 py-2 text-xs tracking-wide ${
-                activeTab === tab.id
-                  ? "border-accent text-text-primary"
-                  : "border-transparent text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <NavTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         {activeTab === "songs" && (
           <>
@@ -680,23 +678,14 @@ function App() {
 
         {/* Selection bar — only shows when songs are selected */}
         {selectedSongs.length > 0 && (
-          <section className="flex flex-wrap items-center gap-2.5 border-b border-accent/20 bg-accent/8 px-4 py-2.5">
-            <span className="flex-1 text-xs font-medium text-accent">
-              {selectedSongs.length} song{selectedSongs.length > 1 ? "s" : ""} selected
-            </span>
-            <button onClick={clearPlaylist} className="border-danger/30 text-danger">
-              Clear
-            </button>
-            <button onClick={mergePDFs} disabled={isLoading}>
-              {isLoading ? "Building…" : "Download PDF"}
-            </button>
-            <button onClick={handleSavePlaylist} className="border-transparent bg-text-primary text-canvas hover:bg-text-secondary">
-              Save Setlist
-            </button>
-            <button type="button" className="border-accent/40 text-accent" title="Live Mode is next in implementation">
-              Live Mode
-            </button>
-          </section>
+          <SelectionBar
+            selectedCount={selectedSongs.length}
+            onClear={clearPlaylist}
+            onDownload={mergePDFs}
+            isLoading={isLoading}
+            onSave={handleSaveSetlist}
+            onLiveMode={() => setActiveTab("live")}
+          />
         )}
 
         {/* Form Section */}
@@ -892,8 +881,64 @@ function App() {
         {activeTab === "setlists" && (
           <section className="px-4 py-6">
             <div className="rounded-md border border-border bg-surface p-4">
-              <h2 className="mb-2 text-sm font-medium text-text-primary">Setlists</h2>
-              <p className="text-sm text-text-secondary">Setlist management is next in implementation. Existing "Save Setlist" in Songs still works.</p>
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-medium text-text-primary">Setlists</h2>
+                <div className="flex-1" />
+                <button
+                  type="button"
+                  onClick={handleSaveSetlist}
+                  disabled={selectedSongs.length === 0}
+                  className="border-transparent bg-accent text-white hover:bg-accent/85"
+                >
+                  Save Current Selection
+                </button>
+              </div>
+
+              {setlistsError && (
+                <p className="mb-3 text-sm text-danger">{setlistsError}</p>
+              )}
+
+              {isSetlistsLoading ? (
+                <p className="text-sm text-text-secondary">Loading setlists...</p>
+              ) : setlists.length === 0 ? (
+                <p className="text-sm text-text-secondary">No saved setlists yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {setlists.map((setlist) => {
+                    const createdLabel =
+                      setlist?.createdAt?.toDate
+                        ? setlist.createdAt.toDate().toLocaleDateString()
+                        : "Unknown date";
+                    const songCount = Array.isArray(setlist.songIds) ? setlist.songIds.length : 0;
+
+                    return (
+                      <li
+                        key={setlist.id}
+                        className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-base px-3 py-2"
+                      >
+                        <div className="min-w-[180px] flex-1">
+                          <p className="text-sm font-medium text-text-primary">{setlist.name || "Untitled setlist"}</p>
+                          <p className="text-xs text-text-secondary">
+                            {songCount} song{songCount === 1 ? "" : "s"} • {createdLabel}
+                          </p>
+                        </div>
+                        <button type="button" onClick={() => handleLoadSetlist(setlist.songIds || [])}>
+                          Load
+                        </button>
+                        {userRole === "admin" && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSetlist(setlist.id)}
+                            className="border-danger/30 text-danger"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           </section>
         )}
