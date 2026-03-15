@@ -170,6 +170,7 @@ function App() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [codeCopied, setCodeCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState("songs");
 
   const refreshTenantContext = async (currentUser, firestoreData = null) => {
     const resolvedTenant = await resolveTenantContext(currentUser.uid, firestoreData || {});
@@ -632,6 +633,30 @@ function App() {
       </header>
 
       <main>
+        <nav className="flex border-b border-border bg-canvas px-2">
+          {[
+            { id: "songs", label: "Songs" },
+            { id: "setlists", label: "Setlists" },
+            { id: "live", label: "Live Mode" },
+            { id: "members", label: "Members" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-none border-x-0 border-t-0 border-b-2 px-4 py-2 text-xs tracking-wide ${
+                activeTab === tab.id
+                  ? "border-accent text-text-primary"
+                  : "border-transparent text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        {activeTab === "songs" && (
+          <>
         {/* Toolbar */}
         <section className="flex flex-wrap items-center gap-2.5 border-b border-border px-4 py-3">
           <input
@@ -668,33 +693,44 @@ function App() {
             <button onClick={handleSavePlaylist} className="border-transparent bg-text-primary text-canvas hover:bg-text-secondary">
               Save Setlist
             </button>
+            <button type="button" className="border-accent/40 text-accent" title="Live Mode is next in implementation">
+              Live Mode
+            </button>
           </section>
         )}
 
         {/* Form Section */}
         {isFormVisible && (
-          <section>
-            <h2>{editingSongId ? "Edit Song" : "Add a New Song"}</h2>
-            <form onSubmit={handleAddOrUpdateSong} className="song-form">
-              <div className="form-group">
-                <label htmlFor="title">Title:</label>
+          <section className="mx-auto my-4 w-full max-w-2xl px-4">
+            <h2 className="mb-3 text-sm font-medium text-text-primary">{editingSongId ? "Edit Song" : "Add a New Song"}</h2>
+            <form onSubmit={handleAddOrUpdateSong} className="rounded-md border border-border bg-surface p-4">
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="title">Title:</label>
                 <input
-                  type="text" id="title" name="title"
-                  value={newSong.title} onChange={handleInputChange}
-                  placeholder="Enter song title" required
+                  className="w-full"
+                  type="text"
+                  id="title"
+                  name="title"
+                  value={newSong.title}
+                  onChange={handleInputChange}
+                  placeholder="Enter song title"
+                  required
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="key">Key:</label>
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="key">Key:</label>
                 <Select
-                  id="key" name="key" options={keyOptions}
+                  id="key"
+                  name="key"
+                  options={keyOptions}
                   value={keyOptions.find((o) => o.value === newSong.key)}
                   onChange={(opt) => setNewSong((prev) => ({ ...prev, key: opt.value }))}
                   placeholder="Select a key"
+                  classNamePrefix="react-select"
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="decade">Decade:</label>
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="decade">Decade:</label>
                 <select id="decade" name="decade" value={newSong.decade} onChange={handleInputChange} required>
                   <option value="" disabled>Select a decade</option>
                   {["50s","60s","70s","80s","90s","00s","10s","20s"].map((d) => (
@@ -702,24 +738,34 @@ function App() {
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label htmlFor="artist">Artist:</label>
+              <div className="mb-3 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="artist">Artist:</label>
                 <input
-                  type="text" id="artist" name="artist"
-                  value={newSong.artist} onChange={handleInputChange}
-                  placeholder="Enter artist name" required
+                  className="w-full"
+                  type="text"
+                  id="artist"
+                  name="artist"
+                  value={newSong.artist}
+                  onChange={handleInputChange}
+                  placeholder="Enter artist name"
+                  required
                 />
               </div>
-              <div className="form-group">
-                <label htmlFor="pdf">Upload PDF:</label>
+              <div className="mb-4 flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wide text-text-secondary" htmlFor="pdf">Upload PDF:</label>
                 <input
-                  type="file" id="pdf" accept=".pdf"
+                  className="w-full"
+                  type="file"
+                  id="pdf"
+                  accept=".pdf"
                   onChange={(e) => handleFileUpload(e.target.files[0])}
                 />
-                {uploadedFileName && <p>Uploaded File: {uploadedFileName}</p>}
+                {uploadedFileName && <p className="text-xs text-text-secondary">Uploaded File: {uploadedFileName}</p>}
               </div>
-              <div className="form-group">
-                <button type="submit">{editingSongId ? "Update Song" : "Add Song"}</button>
+              <div>
+                <button type="submit" className="border-transparent bg-accent text-white hover:bg-accent/85">
+                  {editingSongId ? "Update Song" : "Add Song"}
+                </button>
               </div>
             </form>
           </section>
@@ -727,16 +773,16 @@ function App() {
 
         {/* Selected Songs */}
         {selectedSongs.length > 0 && (
-          <section>
-            <h2 style={{ textAlign: "center" }}>Selected Songs</h2>
-            <ul>
+          <section className="mx-auto my-4 w-full max-w-4xl px-4">
+            <h2 className="mb-2 text-center text-sm font-medium text-text-primary">Selected Songs</h2>
+            <ul className="space-y-1.5">
               {selectedSongs.map((id) => {
                 const song = songs.find((s) => s.id === id);
                 if (!song) return null;
                 return (
-                  <li key={id}>
-                    <div className="song-details">{song.title} - {song.artist}</div>
-                    <div className="song-buttons">
+                  <li key={id} className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-2">
+                    <div className="text-sm font-medium text-text-primary">{song.title} - {song.artist}</div>
+                    <div className="flex gap-1.5">
                       <button onClick={() => moveSongUp(id)}>Move Up</button>
                       <button onClick={() => moveSongDown(id)}>Move Down</button>
                     </div>
@@ -748,41 +794,43 @@ function App() {
         )}
 
         {/* Song List */}
-        <section>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: "40px" }}>Select</th>
-                <th onClick={() => handleSort("title")} style={{ cursor: "pointer" }}>
+        <section className="px-4 pb-8">
+          <div className="overflow-x-auto rounded-md border border-border bg-base">
+          <table className="w-full table-fixed border-collapse">
+            <thead className="bg-surface">
+              <tr className="border-b border-border">
+                <th className="w-10 px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
+                <th onClick={() => handleSort("title")} className="cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Title {sortConfig.key === "title" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th onClick={() => handleSort("artist")} style={{ cursor: "pointer" }}>
+                <th onClick={() => handleSort("artist")} className="cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Artist {sortConfig.key === "artist" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th onClick={() => handleSort("key")} style={{ cursor: "pointer", width: "60px" }}>
+                <th onClick={() => handleSort("key")} className="w-[60px] cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Key {sortConfig.key === "key" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th onClick={() => handleSort("decade")} style={{ cursor: "pointer", width: "80px" }}>
+                <th onClick={() => handleSort("decade")} className="w-[80px] cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Era {sortConfig.key === "decade" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
-                <th style={{ width: "140px", textAlign: "center" }}>Actions</th>
+                <th className="w-[180px] px-2 py-2 text-center text-[11px] uppercase tracking-wide text-text-secondary">Actions</th>
               </tr>
             </thead>
             <tbody>
               {(searchTerm.trim() ? filteredSongs : sortedSongs).map((song) => (
-                <tr key={song.id}>
-                  <td>
+                <tr key={song.id} className="border-b border-border/70 hover:bg-surface/70">
+                  <td className="px-2 py-2">
                     <input
                       type="checkbox"
+                      className="h-4 w-4 accent-accent"
                       checked={selectedSongs.includes(song.id)}
                       onChange={(e) => handleSelectSong(song.id, e.target.checked)}
                     />
                   </td>
-                  <td>{song.title}</td>
-                  <td>{song.artist}</td>
-                  <td>{song.key}</td>
-                  <td>{song.decade}</td>
-                  <td>
+                  <td className="px-2 py-2 text-sm text-text-primary">{song.title}</td>
+                  <td className="px-2 py-2 text-sm text-text-primary">{song.artist}</td>
+                  <td className="px-2 py-2 text-sm text-text-secondary">{song.key}</td>
+                  <td className="px-2 py-2 text-sm text-text-secondary">{song.decade}</td>
+                  <td className="px-2 py-2 text-center">
                     <button
                       onClick={async () => {
                         const pdfTab = window.open("about:blank", "_blank");
@@ -809,17 +857,17 @@ function App() {
                           alert("Could not open this PDF. This song is missing a valid PDF URL. Edit the song and upload the PDF again.");
                         }
                       }}
-                      style={{ backgroundColor: "#007BFF", color: "white", marginRight: "10px" }}
+                      className="mr-2 border-transparent bg-accent px-2.5 text-white hover:bg-accent/85"
                     >
                       OPEN
                     </button>
-                    <button onClick={() => handleEditSong(song)} style={{ marginRight: "11px" }}>
+                    <button onClick={() => handleEditSong(song)} className="mr-2 px-2.5">
                       Edit
                     </button>
                     {userRole === "admin" && (
                       <button
                         onClick={() => handleDeleteSong(song.id)}
-                        style={{ color: "red", width: "60px", textAlign: "left", paddingLeft: "5px" }}
+                        className="border-danger/30 px-2.5 text-danger"
                       >
                         Delete
                       </button>
@@ -829,22 +877,52 @@ function App() {
               ))}
               {filteredSongs.length === 0 && searchTerm.trim() !== "" && (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: "center" }}>
+                  <td colSpan="6" className="px-2 py-5 text-center text-sm text-text-secondary">
                     No songs found matching your search criteria.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
         </section>
+          </>
+        )}
+
+        {activeTab === "setlists" && (
+          <section className="px-4 py-6">
+            <div className="rounded-md border border-border bg-surface p-4">
+              <h2 className="mb-2 text-sm font-medium text-text-primary">Setlists</h2>
+              <p className="text-sm text-text-secondary">Setlist management is next in implementation. Existing "Save Setlist" in Songs still works.</p>
+            </div>
+          </section>
+        )}
+
+        {activeTab === "live" && (
+          <section className="px-4 py-6">
+            <div className="rounded-md border border-border bg-surface p-4">
+              <h2 className="mb-2 text-sm font-medium text-text-primary">Live Mode</h2>
+              <p className="text-sm text-text-secondary">Fullscreen per-song PDF view will be wired in the next feature slice.</p>
+            </div>
+          </section>
+        )}
+
+        {activeTab === "members" && (
+          <section className="px-4 py-6">
+            <div className="rounded-md border border-border bg-surface p-4">
+              <h2 className="mb-2 text-sm font-medium text-text-primary">Members</h2>
+              <p className="text-sm text-text-secondary">Member roster and admin actions are queued for next implementation slices.</p>
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );
 
   if (!isAppReady) {
     return (
-      <div style={{ padding: "40px", textAlign: "center", fontFamily: "Georgia, serif" }}>
-        <h2>Loading your band...</h2>
+      <div className="flex min-h-screen items-center justify-center bg-base px-6">
+        <h2 className="text-sm font-medium text-text-secondary">Loading your band...</h2>
       </div>
     );
   }
