@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run tests
+        run: npm test -- --watchAll=false --passWithNoTests
+
       - name: Build
         env:
           REACT_APP_FIREBASE_API_KEY: ${{ secrets.DEV_FIREBASE_API_KEY }}
