@@ -60,7 +60,7 @@ const deriveBandsFromMembership = async (uid) => {
         bandName = bandSnap.data().name || "";
       }
     } catch {
-      // If band root doc is not readable, keep an empty band name.
+      // Band root doc not readable (user not yet a member). Keep empty name.
     }
 
     memberships[bandId] = {
@@ -102,7 +102,9 @@ const pickActiveBand = (bandsMap, preferredBandId = null) => {
 
 export const resolveTenantContext = async (uid, seedUserData = null) => {
   let userData = seedUserData || (await readUserDocData(uid));
-  let bandsMap = hasBandsMap(userData) ? userData.bands : await readUserBandsSubcollection(uid);
+  let bandsMap = hasBandsMap(userData)
+    ? userData.bands
+    : await readUserBandsSubcollection(uid);
 
   if (Object.keys(bandsMap).length === 0) {
     bandsMap = await deriveBandsFromMembership(uid);
@@ -143,16 +145,19 @@ export const requireTenantBandContext = (tenantContext) => {
   return tenantContext;
 };
 
-export const tenantSongsCollectionRef = (tenantContext) => {
+// Firestore: bands/{bandId}/sheet_music
+export const tenantSheetMusicCollectionRef = (tenantContext) => {
   const tenant = requireTenantBandContext(tenantContext);
-  return collection(db, "bands", tenant.bandId, "songs");
+  return collection(db, "bands", tenant.bandId, "sheet_music");
 };
 
-export const tenantSongDocRef = (tenantContext, songId) => {
+export const tenantSheetMusicDocRef = (tenantContext, songId) => {
   const tenant = requireTenantBandContext(tenantContext);
-  return doc(db, "bands", tenant.bandId, "songs", songId);
+  return doc(db, "bands", tenant.bandId, "sheet_music", songId);
 };
 
+// Storage: bands/{bandId}/{folder}/{fileName}
+// folder should be "sheet_music" for chart PDFs, "playlists" for exports.
 export const tenantStoragePath = (tenantContext, folder, fileName) => {
   const tenant = requireTenantBandContext(tenantContext);
   return `bands/${tenant.bandId}/${folder}/${fileName}`;

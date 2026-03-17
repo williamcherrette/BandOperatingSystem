@@ -55,4 +55,4 @@ jobs:
       - name: Deploy to Firebase
         run: |
           firebase target:apply hosting app band-os-qa --project ${{ secrets.QA_FIREBASE_PROJECT_ID }} --token "${{ secrets.QA_FIREBASE_TOKEN }}"
-          firebase deploy --only hosting,firestore:rules,functions --project ${{ secrets.QA_FIREBASE_PROJECT_ID }} --token "${{ secrets.QA_FIREBASE_TOKEN }}" --non-interactive
+          firebase deploy --only hosting,firestore:rules,storage,functions --project ${{ secrets.QA_FIREBASE_PROJECT_ID }} --token "${{ secrets.QA_FIREBASE_TOKEN }}" --non-interactive

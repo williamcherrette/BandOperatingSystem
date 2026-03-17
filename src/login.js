@@ -12,7 +12,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { createBandForUser, joinBandForUser } from "./bandMembershipService";
+import { createBandForUser, joinBandWithInvite } from "./bandMembershipService";
 
 const ensureUserDocument = async (user, preferredDisplayName = "") => {
   const userRef = doc(db, "users", user.uid);
@@ -322,12 +322,12 @@ const Login = ({ onLogin }) => {
   const handleJoinBand = async (e) => {
     e.preventDefault();
     clearMessages();
-    const code = joinCode.trim().toUpperCase();
-    if (!code) { setError("Please enter a band code."); return; }
+    const code = joinCode.trim();
+    if (!code) { setError("Please enter an invite code."); return; }
     setLoading(true);
     try {
       const user = pendingUser || auth.currentUser;
-      await joinBandForUser({ uid: user.uid, bandId: code });
+      await joinBandWithInvite({ uid: user.uid, token: code });
 
       const userSnap = await getDoc(doc(db, "users", user.uid));
       onLogin(user, userSnap.data());
@@ -506,18 +506,17 @@ const Login = ({ onLogin }) => {
             <StepDots current={1} total={2} />
             <h1 style={S.heading}>Join a band</h1>
             <p style={{ color: "#666", fontSize: "0.88rem", marginBottom: "20px", lineHeight: 1.6 }}>
-              Ask your bandleader for the 6-character invite code.
+              Ask your band admin for the invite code.
             </p>
             {error && <div style={S.error}>{error}</div>}
             <form onSubmit={handleJoinBand}>
               <label style={S.label}>Invite Code</label>
               <input
-                style={{ ...S.input, textTransform: "uppercase", letterSpacing: "0.3em", fontSize: "1.3rem", textAlign: "center" }}
+                style={{ ...S.input, letterSpacing: "0.04em", fontSize: "1.0rem", textAlign: "left" }}
                 type="text"
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="X4K9WQ"
-                maxLength={6}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="Paste invite token"
                 required
                 autoFocus
               />

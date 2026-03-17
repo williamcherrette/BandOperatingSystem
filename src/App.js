@@ -21,11 +21,15 @@ import Login from "./login";
 import {
   resolveTenantContext,
   requireTenantBandContext,
-  tenantSongsCollectionRef,
-  tenantSongDocRef,
+  tenantSheetMusicCollectionRef,
+  tenantSheetMusicDocRef,
   tenantStoragePath,
 } from "./tenantContext";
-import { createBandForUser, joinBandForUser } from "./bandMembershipService";
+import {
+  createBandForUser,
+  createInviteForBand,
+  joinBandWithInvite,
+} from "./bandMembershipService";
 import HeaderBar from "./components/HeaderBar";
 import NavTabs from "./components/NavTabs";
 import SelectionBar from "./components/SelectionBar";
@@ -89,15 +93,15 @@ function BandOnboarding({ user, onComplete, onLogout }) {
   const handleJoinBand = async (e) => {
     e.preventDefault();
     setError("");
-    const code = joinCode.trim().toUpperCase();
+    const code = joinCode.trim();
     if (!code) {
-      setError("Please enter a band code.");
+      setError("Please enter an invite code.");
       return;
     }
 
     setLoading(true);
     try {
-      await joinBandForUser({ uid: user.uid, bandId: code });
+      await joinBandWithInvite({ uid: user.uid, token: code });
 
       await onComplete();
     } catch (err) {
@@ -145,7 +149,7 @@ function BandOnboarding({ user, onComplete, onLogout }) {
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
             placeholder="Invite code"
-            style={{ padding: "10px", width: "280px", textTransform: "uppercase" }}
+            style={{ padding: "10px", width: "280px" }}
           />
           <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "center" }}>
             <button type="submit" disabled={loading}>{loading ? "Joining..." : "Join"}</button>
@@ -177,7 +181,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
-  const [codeCopied, setCodeCopied] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
   const [activeTab, setActiveTab] = useState("songs");
   const [setlists, setSetlists] = useState([]);
   const [isSetlistsLoading, setIsSetlistsLoading] = useState(false);
@@ -247,7 +252,7 @@ function App() {
     const fetchSongs = async () => {
       try {
         const tenant = requireTenantBandContext(tenantContext);
-        const querySnapshot = await getDocs(tenantSongsCollectionRef(tenant));
+        const querySnapshot = await getDocs(tenantSheetMusicCollectionRef(tenant));
         const songsList = querySnapshot.docs.map((d) => {
           const data = d.data();
           return {
@@ -278,12 +283,26 @@ function App() {
     setActiveBandId(null);
   };
 
-  // ── Copy invite code ──────────────────────────────────────────────────────
-  const handleCopyCode = () => {
-    if (!activeBandId) return;
-    navigator.clipboard.writeText(activeBandId);
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
+  // ── Generate invite token ─────────────────────────────────────────────────
+  const handleGenerateInvite = async () => {
+    if (!activeBandId || !user?.uid) return;
+
+    setError("");
+    setIsGeneratingInvite(true);
+    try {
+      const token = await createInviteForBand({
+        bandId: activeBandId,
+        adminUid: user.uid,
+      });
+      await navigator.clipboard.writeText(token);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2500);
+    } catch (err) {
+      console.error("Error generating invite:", err);
+      setError(err?.message || "Failed to generate invite token.");
+    } finally {
+      setIsGeneratingInvite(false);
+    }
   };
 
   const isAuthed = !!user;
@@ -298,7 +317,7 @@ function App() {
     }
     try {
       const tenant = requireTenantBandContext(tenantContext);
-      const storageRef = ref(storage, tenantStoragePath(tenant, "pdfs", file.name));
+      const storageRef = ref(storage, tenantStoragePath(tenant, "sheet_music", file.name));
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
       const cleanedFileName = file.name.replace(/\.pdf$/i, "");
@@ -353,10 +372,7 @@ function App() {
     const candidatePaths = [storagePath];
 
     if (fileName && activeBandId) {
-      candidatePaths.push(`bands/${activeBandId}/pdfs/${fileName}`);
-      candidatePaths.push(`bands/${activeBandId}/playlists/${fileName}`);
-      candidatePaths.push(`pdfs/${fileName}`);
-      candidatePaths.push(`playlists/${fileName}`);
+      candidatePaths.push(`bands/${activeBandId}/sheet_music/${fileName}`);
     }
 
     let freshUrl = "";
@@ -376,7 +392,7 @@ function App() {
     if (freshUrl !== existingUrl && song?.id) {
       try {
         const tenant = requireTenantBandContext(tenantContext);
-        const songRef = tenantSongDocRef(tenant, song.id);
+        const songRef = tenantSheetMusicDocRef(tenant, song.id);
         await updateDoc(songRef, { pdfUrl: freshUrl });
         setSongs((prev) => prev.map((s) => (s.id === song.id ? { ...s, pdfUrl: freshUrl } : s)));
       } catch (err) {
@@ -398,20 +414,20 @@ function App() {
   // ── Add / Update song ─────────────────────────────────────────────────────
   const handleAddOrUpdateSong = async (e) => {
     e.preventDefault();
-    if (!newSong.title || !newSong.key || !newSong.decade || !newSong.artist || !newSong.pdfUrl) {
+    if (!newSong.title || !newSong.key || !newSong.decade || !newSong.artist) {
       setError("All fields are required!");
       return;
     }
     try {
       const tenant = requireTenantBandContext(tenantContext);
       if (editingSongId) {
-        const songRef = tenantSongDocRef(tenant, editingSongId);
+        const songRef = tenantSheetMusicDocRef(tenant, editingSongId);
         await updateDoc(songRef, newSong);
         setSongs((prev) =>
           prev.map((s) => (s.id === editingSongId ? { id: editingSongId, ...newSong } : s))
         );
       } else {
-        const docRef = await addDoc(tenantSongsCollectionRef(tenant), newSong);
+        const docRef = await addDoc(tenantSheetMusicCollectionRef(tenant), newSong);
         setSongs((prev) => [...prev, { id: docRef.id, ...newSong }]);
       }
       setNewSong({ title: "", key: "", decade: "", artist: "", pdfUrl: "" });
@@ -452,7 +468,7 @@ function App() {
     if (!window.confirm("Are you sure you want to delete this song?")) return;
     try {
       const tenant = requireTenantBandContext(tenantContext);
-      await deleteDoc(tenantSongDocRef(tenant, id));
+      await deleteDoc(tenantSheetMusicDocRef(tenant, id));
       setSongs(songs.filter((s) => s.id !== id));
     } catch (err) {
       console.error("Error deleting song:", err);
@@ -643,9 +659,10 @@ function App() {
     >
       <HeaderBar
         activeBandName={activeBandName}
-        activeBandId={activeBandId}
-        codeCopied={codeCopied}
-        onCopyCode={handleCopyCode}
+        canGenerateInvite={!!activeBandId && userRole === "admin"}
+        inviteCopied={inviteCopied}
+        isGeneratingInvite={isGeneratingInvite}
+        onGenerateInvite={handleGenerateInvite}
         onLogout={handleLogout}
         error={error}
       />
@@ -656,20 +673,20 @@ function App() {
         {activeTab === "songs" && (
           <>
         {/* Toolbar */}
-        <section className="flex flex-wrap items-center gap-2.5 border-b border-border px-4 py-3">
-          <input
-            type="text"
-            placeholder="Search songs..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-[220px]"
-          />
+            <section className="flex items-center gap-2.5 border-b border-border px-4 py-3">
+              <input
+                type="text"
+                placeholder="Search songs..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-48"
+              />
           <button onClick={() => setSearchTerm("")}>Clear</button>
 
           <div className="flex-1" />
 
           <button onClick={() => setIsFormVisible(!isFormVisible)}>
-            {isFormVisible ? "Hide Form" : "+ Add Song"}
+            {isFormVisible ? "Hide Form" : "+ Add"}
           </button>
           {songs.length > 0 && (
             <button onClick={generateRandomSelection}>Random</button>
@@ -788,7 +805,7 @@ function App() {
           <table className="w-full table-fixed border-collapse">
             <thead className="bg-surface">
               <tr className="border-b border-border">
-                <th className="w-10 px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
+                <th className="w-16 px-3 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary">Select</th>
                 <th onClick={() => handleSort("title")} className="cursor-pointer px-2 py-2 text-left text-[11px] uppercase tracking-wide text-text-secondary hover:text-text-primary">
                   Title {sortConfig.key === "title" && (sortConfig.direction === "asc" ? "↑" : "↓")}
                 </th>
@@ -819,48 +836,48 @@ function App() {
                   <td className="px-2 py-2 text-sm text-text-primary">{song.artist}</td>
                   <td className="px-2 py-2 text-sm text-text-secondary">{song.key}</td>
                   <td className="px-2 py-2 text-sm text-text-secondary">{song.decade}</td>
-                  <td className="px-2 py-2 text-center">
-                    <button
-                      onClick={async () => {
-                        const pdfTab = window.open("about:blank", "_blank");
-                        if (!pdfTab) {
-                          alert("Popup blocked. Please allow popups for this site to open PDFs in a new tab.");
-                          return;
-                        }
-
-                        pdfTab.document.title = "Opening PDF...";
-                        pdfTab.document.body.innerHTML = "<p style='font-family:Georgia,serif;padding:24px;'>Loading PDF...</p>";
-
-                        try {
-                          const resolvedUrl = await resolveSongPdfUrl(song);
-                          if (!resolvedUrl) throw new Error("No resolved URL available");
-                          pdfTab.location.replace(resolvedUrl);
-                        } catch (err) {
-                          console.error("Error opening PDF:", err);
-                          const fallbackUrl = song?.pdfUrl || song?.pdfPath || "";
-                          if (fallbackUrl) {
-                            pdfTab.location.replace(fallbackUrl);
+                  <td className="px-2 py-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={async () => {
+                          const pdfTab = window.open("about:blank", "_blank");
+                          if (!pdfTab) {
+                            alert("Popup blocked. Please allow popups for this site to open PDFs in a new tab.");
                             return;
                           }
-                          pdfTab.close();
-                          alert("Could not open this PDF. This song is missing a valid PDF URL. Edit the song and upload the PDF again.");
-                        }
-                      }}
-                      className="mr-2 border-transparent bg-accent px-2.5 text-white hover:bg-accent/85"
-                    >
-                      OPEN
-                    </button>
-                    <button onClick={() => handleEditSong(song)} className="mr-2 px-2.5">
-                      Edit
-                    </button>
-                    {userRole === "admin" && (
-                      <button
-                        onClick={() => handleDeleteSong(song.id)}
-                        className="border-danger/30 px-2.5 text-danger"
+                          pdfTab.document.title = "Opening PDF...";
+                          pdfTab.document.body.innerHTML = "<p style='font-family:Georgia,serif;padding:24px;'>Loading PDF...</p>";
+                          try {
+                            const resolvedUrl = await resolveSongPdfUrl(song);
+                            if (!resolvedUrl) throw new Error("No resolved URL available");
+                            pdfTab.location.replace(resolvedUrl);
+                          } catch (err) {
+                            console.error("Error opening PDF:", err);
+                            const fallbackUrl = song?.pdfUrl || song?.pdfPath || "";
+                            if (fallbackUrl) {
+                              pdfTab.location.replace(fallbackUrl);
+                              return;
+                            }
+                            pdfTab.close();
+                            alert("Could not open this PDF.");
+                          }
+                        }}
+                        style={{ color: "#2563eb", border: "none", background: "transparent" }}
                       >
-                        Delete
+                        Open
                       </button>
-                    )}
+                      <button onClick={() => handleEditSong(song)}>
+                        Edit
+                      </button>
+                      {userRole === "admin" && (
+                        <button
+                          onClick={() => handleDeleteSong(song.id)}
+                          style={{ color: "#a0a09a", borderColor: "#2e2e2c", background: "transparent" }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
