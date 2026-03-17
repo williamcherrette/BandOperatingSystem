@@ -21,11 +21,15 @@ import Login from "./login";
 import {
   resolveTenantContext,
   requireTenantBandContext,
-  tenantSongsCollectionRef,
-  tenantSongDocRef,
+  tenantSheetMusicCollectionRef,
+  tenantSheetMusicDocRef,
   tenantStoragePath,
 } from "./tenantContext";
-import { createBandForUser, joinBandForUser } from "./bandMembershipService";
+import {
+  createBandForUser,
+  createInviteForBand,
+  joinBandWithInvite,
+} from "./bandMembershipService";
 import HeaderBar from "./components/HeaderBar";
 import NavTabs from "./components/NavTabs";
 import SelectionBar from "./components/SelectionBar";
@@ -89,15 +93,15 @@ function BandOnboarding({ user, onComplete, onLogout }) {
   const handleJoinBand = async (e) => {
     e.preventDefault();
     setError("");
-    const code = joinCode.trim().toUpperCase();
+    const code = joinCode.trim();
     if (!code) {
-      setError("Please enter a band code.");
+      setError("Please enter an invite code.");
       return;
     }
 
     setLoading(true);
     try {
-      await joinBandForUser({ uid: user.uid, bandId: code });
+      await joinBandWithInvite({ uid: user.uid, token: code });
 
       await onComplete();
     } catch (err) {
@@ -145,7 +149,7 @@ function BandOnboarding({ user, onComplete, onLogout }) {
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
             placeholder="Invite code"
-            style={{ padding: "10px", width: "280px", textTransform: "uppercase" }}
+            style={{ padding: "10px", width: "280px" }}
           />
           <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "center" }}>
             <button type="submit" disabled={loading}>{loading ? "Joining..." : "Join"}</button>
@@ -177,7 +181,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
-  const [codeCopied, setCodeCopied] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
   const [activeTab, setActiveTab] = useState("songs");
   const [setlists, setSetlists] = useState([]);
   const [isSetlistsLoading, setIsSetlistsLoading] = useState(false);
@@ -247,7 +252,7 @@ function App() {
     const fetchSongs = async () => {
       try {
         const tenant = requireTenantBandContext(tenantContext);
-        const querySnapshot = await getDocs(tenantSongsCollectionRef(tenant));
+        const querySnapshot = await getDocs(tenantSheetMusicCollectionRef(tenant));
         const songsList = querySnapshot.docs.map((d) => {
           const data = d.data();
           return {
@@ -278,12 +283,26 @@ function App() {
     setActiveBandId(null);
   };
 
-  // ── Copy invite code ──────────────────────────────────────────────────────
-  const handleCopyCode = () => {
-    if (!activeBandId) return;
-    navigator.clipboard.writeText(activeBandId);
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
+  // ── Generate invite token ─────────────────────────────────────────────────
+  const handleGenerateInvite = async () => {
+    if (!activeBandId || !user?.uid) return;
+
+    setError("");
+    setIsGeneratingInvite(true);
+    try {
+      const token = await createInviteForBand({
+        bandId: activeBandId,
+        adminUid: user.uid,
+      });
+      await navigator.clipboard.writeText(token);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2500);
+    } catch (err) {
+      console.error("Error generating invite:", err);
+      setError(err?.message || "Failed to generate invite token.");
+    } finally {
+      setIsGeneratingInvite(false);
+    }
   };
 
   const isAuthed = !!user;
@@ -298,7 +317,7 @@ function App() {
     }
     try {
       const tenant = requireTenantBandContext(tenantContext);
-      const storageRef = ref(storage, tenantStoragePath(tenant, "pdfs", file.name));
+      const storageRef = ref(storage, tenantStoragePath(tenant, "sheet_music", file.name));
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
       const cleanedFileName = file.name.replace(/\.pdf$/i, "");
@@ -353,10 +372,7 @@ function App() {
     const candidatePaths = [storagePath];
 
     if (fileName && activeBandId) {
-      candidatePaths.push(`bands/${activeBandId}/pdfs/${fileName}`);
-      candidatePaths.push(`bands/${activeBandId}/playlists/${fileName}`);
-      candidatePaths.push(`pdfs/${fileName}`);
-      candidatePaths.push(`playlists/${fileName}`);
+      candidatePaths.push(`bands/${activeBandId}/sheet_music/${fileName}`);
     }
 
     let freshUrl = "";
@@ -376,7 +392,7 @@ function App() {
     if (freshUrl !== existingUrl && song?.id) {
       try {
         const tenant = requireTenantBandContext(tenantContext);
-        const songRef = tenantSongDocRef(tenant, song.id);
+        const songRef = tenantSheetMusicDocRef(tenant, song.id);
         await updateDoc(songRef, { pdfUrl: freshUrl });
         setSongs((prev) => prev.map((s) => (s.id === song.id ? { ...s, pdfUrl: freshUrl } : s)));
       } catch (err) {
@@ -405,13 +421,13 @@ function App() {
     try {
       const tenant = requireTenantBandContext(tenantContext);
       if (editingSongId) {
-        const songRef = tenantSongDocRef(tenant, editingSongId);
+        const songRef = tenantSheetMusicDocRef(tenant, editingSongId);
         await updateDoc(songRef, newSong);
         setSongs((prev) =>
           prev.map((s) => (s.id === editingSongId ? { id: editingSongId, ...newSong } : s))
         );
       } else {
-        const docRef = await addDoc(tenantSongsCollectionRef(tenant), newSong);
+        const docRef = await addDoc(tenantSheetMusicCollectionRef(tenant), newSong);
         setSongs((prev) => [...prev, { id: docRef.id, ...newSong }]);
       }
       setNewSong({ title: "", key: "", decade: "", artist: "", pdfUrl: "" });
@@ -452,7 +468,7 @@ function App() {
     if (!window.confirm("Are you sure you want to delete this song?")) return;
     try {
       const tenant = requireTenantBandContext(tenantContext);
-      await deleteDoc(tenantSongDocRef(tenant, id));
+      await deleteDoc(tenantSheetMusicDocRef(tenant, id));
       setSongs(songs.filter((s) => s.id !== id));
     } catch (err) {
       console.error("Error deleting song:", err);
@@ -643,9 +659,10 @@ function App() {
     >
       <HeaderBar
         activeBandName={activeBandName}
-        activeBandId={activeBandId}
-        codeCopied={codeCopied}
-        onCopyCode={handleCopyCode}
+        canGenerateInvite={!!activeBandId && userRole === "admin"}
+        inviteCopied={inviteCopied}
+        isGeneratingInvite={isGeneratingInvite}
+        onGenerateInvite={handleGenerateInvite}
         onLogout={handleLogout}
         error={error}
       />

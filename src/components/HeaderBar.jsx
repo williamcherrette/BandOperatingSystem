@@ -1,8 +1,9 @@
 export default function HeaderBar({
   activeBandName,
-  activeBandId,
-  codeCopied,
-  onCopyCode,
+  canGenerateInvite,
+  inviteCopied,
+  isGeneratingInvite,
+  onGenerateInvite,
   onLogout,
   error,
 }) {
@@ -18,15 +19,20 @@ export default function HeaderBar({
 
       <div className="flex-1" />
 
-      {activeBandId && (
+      {canGenerateInvite && (
         <button
-          onClick={onCopyCode}
-          title="Copy invite code"
+          onClick={onGenerateInvite}
+          title="Generate and copy invite token"
+          disabled={isGeneratingInvite}
           className={`rounded border border-border px-2.5 py-1 text-[11px] tracking-[0.08em] ${
-            codeCopied ? "bg-accent/15 text-accent" : "bg-transparent text-text-muted"
+            inviteCopied ? "bg-accent/15 text-accent" : "bg-transparent text-text-muted"
           }`}
         >
-          {codeCopied ? "Copied!" : `Code: ${activeBandId}`}
+          {isGeneratingInvite
+            ? "Generating..."
+            : inviteCopied
+              ? "Invite Copied!"
+              : "Generate Invite"}
         </button>
       )}
 

@@ -1,66 +1,129 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
     function isSignedIn() {
       return request.auth != null;
     }
+
     function isSelf(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
+
     function isBandMember(bandId) {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/bands/$(bandId)/members/$(request.auth.uid));
     }
+
     function isBandAdmin(bandId) {
       return isSignedIn() &&
         get(/databases/$(database)/documents/bands/$(bandId)/members/$(request.auth.uid)).data.role == "admin";
     }
 
-    // User profile document: users/{uid}
+    function isValidInviteClaim(bandId, token) {
+      let inv = get(/databases/$(database)/documents/invites/$(token)).data;
+      return inv.bandId    == bandId
+          && inv.usedBy    == null
+          && inv.expiresAt >  request.time;
+    }
+
+    // ── User profiles: users/{uid} ────────────────────────────────────────
     match /users/{uid} {
       allow read, create, update, delete: if isSelf(uid);
+
       match /bands/{bandId} {
         allow read, create, update, delete: if isSelf(uid);
       }
     }
 
-    // Band root document: bands/{bandId}
+    // ── Band root document: bands/{bandId} ────────────────────────────────
     match /bands/{bandId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow get:    if isBandMember(bandId);
+      allow list:   if isBandMember(bandId);
+      allow create: if isSignedIn() &&
+                       request.resource.data.ownerId == request.auth.uid;
       allow update, delete: if isBandAdmin(bandId);
 
-      // Band member documents: bands/{bandId}/members/{uid}
+      // ── Members: bands/{bandId}/members/{uid} ────────────────────────────
       match /members/{uid} {
         allow read: if isBandMember(bandId);
-        allow create: if isSelf(uid) && (
-          request.resource.data.role == "member" ||
-          (request.resource.data.role == "admin" &&
-            get(/databases/$(database)/documents/bands/$(bandId)).data.ownerId == request.auth.uid)
-        );
+
+        allow create: if isSelf(uid) &&
+                         exists(/databases/$(database)/documents/bands/$(bandId)) &&
+                         (
+                           (
+                             request.resource.data.role == "admin" &&
+                             get(/databases/$(database)/documents/bands/$(bandId)).data.ownerId == request.auth.uid
+                           )
+                           ||
+                           (
+                             request.resource.data.role == "member" &&
+                             request.resource.data.claimedVia is string &&
+                             request.resource.data.claimedVia.size() > 0 &&
+                             isValidInviteClaim(bandId, request.resource.data.claimedVia)
+                           )
+                         );
+
         allow update, delete: if isBandAdmin(bandId);
       }
 
-      // Songs collection: bands/{bandId}/songs/{songId}
-      match /songs/{songId} {
-        allow read: if isBandMember(bandId);
-        allow create: if isBandMember(bandId);
-        allow update: if isBandMember(bandId) &&
-          request.resource.data.createdBy == resource.data.createdBy;
+      // ── Sheet music: bands/{bandId}/sheet_music/{songId} ──────────────────
+      // Unified collection for all song metadata and PDF references.
+      // Any member can add a new entry. Only admins can edit or delete —
+      // sheet_music docs are shared assets referenced by multiple setlists,
+      // so mutations to global fields (title, key, pdfStoragePath) are
+      // admin-gated to prevent members from breaking other setlists.
+      //
+      // Per-performance overrides (key, tempo, notes for a specific show)
+      // belong on the setlist item, not here.
+      //
+      // createdBy is enforced on create and is immutable thereafter.
+      match /sheet_music/{songId} {
+        allow read:   if isBandMember(bandId);
+        allow create: if isBandMember(bandId) &&
+                         request.resource.data.createdBy == request.auth.uid;
+        allow update: if isBandAdmin(bandId) &&
+                         request.resource.data.createdBy == resource.data.createdBy;
         allow delete: if isBandAdmin(bandId);
       }
 
-      // Setlists collection: bands/{bandId}/setlists/{setlistId}
+      // ── Setlists: bands/{bandId}/setlists/{setlistId} ─────────────────────
+      // Collaborative: any member can create or edit. Only admins can delete.
+      // createdBy is enforced on create and is immutable thereafter.
       match /setlists/{setlistId} {
-        allow read: if isBandMember(bandId);
-        allow create: if isBandMember(bandId);
+        allow read:   if isBandMember(bandId);
+        allow create: if isBandMember(bandId) &&
+                         request.resource.data.createdBy == request.auth.uid;
         allow update: if isBandMember(bandId) &&
-          request.resource.data.createdBy == resource.data.createdBy;
+                         request.resource.data.createdBy == resource.data.createdBy;
         allow delete: if isBandAdmin(bandId);
       }
     }
 
-    // Deny everything else by default.
+    // ── Invites (top-level): invites/{token} ──────────────────────────────
+    match /invites/{token} {
+      allow get:  if isSignedIn();
+      allow list: if false;
+
+      allow create: if isBandAdmin(request.resource.data.bandId) &&
+                       request.resource.data.createdBy == request.auth.uid &&
+                       request.resource.data.usedBy    == null &&
+                       request.resource.data.bandId    is string &&
+                       request.resource.data.expiresAt is timestamp;
+
+      allow update: if isSignedIn() &&
+                       resource.data.usedBy == null &&
+                       request.resource.data.usedBy    == request.auth.uid &&
+                       request.resource.data.bandId    == resource.data.bandId &&
+                       request.resource.data.createdBy == resource.data.createdBy &&
+                       request.resource.data.expiresAt == resource.data.expiresAt;
+
+      allow delete: if isBandAdmin(resource.data.bandId);
+    }
+
+    // ── Deny everything else ──────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
     }

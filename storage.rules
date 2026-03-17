@@ -1,6 +1,9 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -17,24 +20,31 @@ service firebase.storage {
 
     function isValidPdf() {
       return request.resource.contentType == 'application/pdf'
-        && request.resource.size < 5 * 1024 * 1024; // 5MB
+          && request.resource.size < 5 * 1024 * 1024;
     }
 
-    // Song chart PDFs uploaded from the add/edit form.
-    match /bands/{bandId}/pdfs/{fileName} {
-      allow read: if isBandMember(bandId);
+    // ── Sheet music PDFs: bands/{bandId}/sheet_music/{fileName} ───────────
+    // Mirrors the bands/{bandId}/sheet_music Firestore collection.
+    // Any member can upload or replace a chart PDF.
+    // Only admins can delete, matching the Firestore-side admin-only delete
+    // on sheet_music documents.
+    match /bands/{bandId}/sheet_music/{fileName} {
+      allow read:           if isBandMember(bandId);
       allow create, update: if isBandMember(bandId) && isValidPdf();
-      allow delete: if isBandAdmin(bandId);
+      allow delete:         if isBandAdmin(bandId);
     }
 
-    // Generated playlist PDFs.
+    // ── Generated playlist PDFs: bands/{bandId}/playlists/{fileName} ──────
+    // Exported/merged PDFs produced at runtime. Separate from sheet_music
+    // because these are ephemeral outputs, not source-of-truth chart files.
+    // Any member can write; only admins can delete.
     match /bands/{bandId}/playlists/{fileName} {
-      allow read: if isBandMember(bandId);
+      allow read:           if isBandMember(bandId);
       allow create, update: if isBandMember(bandId) && isValidPdf();
-      allow delete: if isBandAdmin(bandId);
+      allow delete:         if isBandAdmin(bandId);
     }
 
-    // Deny everything else by default.
+    // ── Deny everything else ──────────────────────────────────────────────
     match /{allPaths=**} {
       allow read, write: if false;
     }
