@@ -79,6 +79,38 @@ const deriveBandsFromMembership = async (uid) => {
   return memberships;
 };
 
+const backfillOwnerMemberships = async (uid, cachedBands = {}, memberships = {}) => {
+  const updates = { ...memberships };
+
+  for (const [bandId, bandInfo] of Object.entries(cachedBands || {})) {
+    if (!bandInfo?.owned || updates[bandId]) continue;
+
+    try {
+      // Owner self-enrollment is allowed by rules when band.ownerId == uid.
+      await setDoc(
+        doc(db, "bands", bandId, "members", uid),
+        { role: "admin" },
+        { merge: true }
+      );
+
+      updates[bandId] = {
+        role: "admin",
+        bandName: bandInfo?.bandName || "",
+      };
+
+      await setDoc(
+        doc(db, "users", uid, "bands", bandId),
+        { role: "admin", bandName: bandInfo?.bandName || "", owned: true },
+        { merge: true }
+      );
+    } catch {
+      // Ignore bands that fail owner backfill checks.
+    }
+  }
+
+  return updates;
+};
+
 const pickActiveBand = (bandsMap, preferredBandId = null) => {
   const entries = Object.entries(bandsMap || {});
   if (entries.length === 0) return defaultBandContext;
@@ -102,13 +134,15 @@ const pickActiveBand = (bandsMap, preferredBandId = null) => {
 
 export const resolveTenantContext = async (uid, seedUserData = null) => {
   let userData = seedUserData || (await readUserDocData(uid));
-  let bandsMap = hasBandsMap(userData)
+  const cachedBandsMap = hasBandsMap(userData)
     ? userData.bands
     : await readUserBandsSubcollection(uid);
 
-  if (Object.keys(bandsMap).length === 0) {
-    bandsMap = await deriveBandsFromMembership(uid);
-  }
+  // Membership docs are the security-rule authority for tenant access.
+  let bandsMap = await deriveBandsFromMembership(uid);
+  bandsMap = await backfillOwnerMemberships(uid, cachedBandsMap, bandsMap);
+
+  if (Object.keys(bandsMap).length === 0) bandsMap = {};
 
   const activeBand = pickActiveBand(bandsMap, userData?.lastActiveBandId || null);
 
