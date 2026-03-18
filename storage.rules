@@ -2,25 +2,18 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // ── Helpers ───────────────────────────────────────────────────────────
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function roleForBand(bandId) {
-      return isSignedIn() && request.auth.token.bandRoles is map
-        ? request.auth.token.bandRoles[bandId]
-        : null;
-    }
-
     function isBandMember(bandId) {
-      let role = roleForBand(bandId);
-      return role == "member" || role == "admin";
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/bands/$(bandId)/members/$(request.auth.uid));
     }
 
     function isBandAdmin(bandId) {
-      return roleForBand(bandId) == "admin";
+      return isSignedIn() &&
+        firestore.get(/databases/(default)/documents/bands/$(bandId)/members/$(request.auth.uid)).data.role == "admin";
     }
 
     function isValidPdf() {
@@ -28,26 +21,18 @@ service firebase.storage {
           && request.resource.size < 5 * 1024 * 1024;
     }
 
-    // ── Sheet music PDFs: bands/{bandId}/sheet_music/{fileName} ───────────
-    // Mirrors the bands/{bandId}/sheet_music Firestore collection.
-    // Members can read/write chart PDFs for their own band.
-    // Only admins can delete.
     match /bands/{bandId}/sheet_music/{fileName} {
       allow read:           if isBandMember(bandId);
       allow create, update: if isBandMember(bandId) && isValidPdf();
       allow delete:         if isBandAdmin(bandId);
     }
 
-    // ── Generated playlist PDFs: bands/{bandId}/playlists/{fileName} ──────
-    // Members can read/write generated playlists for their own band.
-    // Only admins can delete.
     match /bands/{bandId}/playlists/{fileName} {
       allow read:           if isBandMember(bandId);
       allow create, update: if isBandMember(bandId) && isValidPdf();
       allow delete:         if isBandAdmin(bandId);
     }
 
-    // ── Deny everything else ──────────────────────────────────────────────
     match /{allPaths=**} {
       allow read, write: if false;
     }
