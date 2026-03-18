@@ -16,6 +16,7 @@ import { PDFDocument } from "pdf-lib";
 import Select from "react-select";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { auth, db } from "./firebase";
 import Login from "./login";
 import {
@@ -161,6 +162,49 @@ function BandOnboarding({ user, onComplete, onLogout }) {
   );
 }
 
+function SetlistModal({ open, name, date, onNameChange, onDateChange, onConfirm, onCancel }) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-full max-w-sm rounded-md border border-border bg-surface p-6">
+        <h2 className="mb-4 text-sm font-medium text-text-primary">Save Setlist</h2>
+        <div className="mb-3 flex flex-col gap-1.5">
+          <label className="text-xs uppercase tracking-wide text-text-secondary">Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            placeholder="e.g. Friday Night Show"
+            autoFocus
+          />
+        </div>
+        <div className="mb-5 flex flex-col gap-1.5">
+          <label className="text-xs uppercase tracking-wide text-text-secondary">
+            Performance Date <span className="normal-case text-text-secondary">(optional)</span>
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => onDateChange(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCancel}>Cancel</button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!name.trim()}
+            className="border-transparent bg-accent text-white hover:bg-accent/85"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [, setUserData] = useState(null);   // users/{uid} doc data
@@ -187,6 +231,10 @@ function App() {
   const [setlists, setSetlists] = useState([]);
   const [isSetlistsLoading, setIsSetlistsLoading] = useState(false);
   const [setlistsError, setSetlistsError] = useState("");
+  const [editingSetlistId, setEditingSetlistId] = useState(null);
+  const [setlistModalOpen, setSetlistModalOpen] = useState(false);
+  const [setlistModalName, setSetlistModalName] = useState("");
+  const [setlistModalDate, setSetlistModalDate] = useState("");
 
   const refreshTenantContext = async (currentUser, firestoreData = null) => {
     const resolvedTenant = await resolveTenantContext(currentUser.uid, firestoreData || {});
@@ -248,6 +296,7 @@ function App() {
   // ── Fetch songs whenever activeBandId changes ─────────────────────────────
   useEffect(() => {
     if (!user || !tenantContext?.bandId) return;
+    setEditingSetlistId(null);
 
     const fetchSongs = async () => {
       try {
@@ -279,6 +328,10 @@ function App() {
     signOut(auth);
     setSongs([]);
     setSelectedSongs([]);
+    setEditingSetlistId(null);
+    setSetlistModalOpen(false);
+    setSetlistModalName("");
+    setSetlistModalDate("");
     setTenantContext(null);
     setActiveBandId(null);
   };
@@ -519,22 +572,13 @@ function App() {
     }
   };
 
-  const moveSongUp = (id) => {
-    const index = selectedSongs.indexOf(id);
-    if (index > 0) {
-      const newOrder = [...selectedSongs];
-      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-      setSelectedSongs(newOrder);
-    }
-  };
-
-  const moveSongDown = (id) => {
-    const index = selectedSongs.indexOf(id);
-    if (index < selectedSongs.length - 1) {
-      const newOrder = [...selectedSongs];
-      [newOrder[index + 1], newOrder[index]] = [newOrder[index], newOrder[index + 1]];
-      setSelectedSongs(newOrder);
-    }
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    if (result.destination.index === result.source.index) return;
+    const newOrder = [...selectedSongs];
+    const [moved] = newOrder.splice(result.source.index, 1);
+    newOrder.splice(result.destination.index, 0, moved);
+    setSelectedSongs(newOrder);
   };
 
   const handleSort = (key) => {
@@ -594,25 +638,46 @@ function App() {
     fetchSetlists();
   }, [fetchSetlists]);
 
-  const handleSaveSetlist = async () => {
+  const handleSaveSetlist = () => {
     if (selectedSongs.length === 0) {
       alert("Select at least one song before saving a setlist.");
       return;
     }
 
-    const proposedName = `Setlist ${new Date().toISOString().split("T")[0]}`;
-    const name = window.prompt("Setlist name", proposedName)?.trim();
+    const currentSetlist = editingSetlistId
+      ? setlists.find((s) => s.id === editingSetlistId)
+      : null;
+    setSetlistModalName(currentSetlist?.name || `Setlist ${new Date().toISOString().split("T")[0]}`);
+    setSetlistModalDate(currentSetlist?.performanceDate || "");
+    setSetlistModalOpen(true);
+  };
+
+  const handleConfirmSaveSetlist = async () => {
+    const name = setlistModalName.trim();
     if (!name) return;
 
     try {
       const tenant = requireTenantBandContext(tenantContext);
-      const setlistsRef = collection(db, "bands", tenant.bandId, "setlists");
-      await addDoc(setlistsRef, {
+      const payload = {
         name,
         songIds: selectedSongs,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-      });
+        performanceDate: setlistModalDate || null,
+      };
+
+      if (editingSetlistId) {
+        await updateDoc(doc(db, "bands", tenant.bandId, "setlists", editingSetlistId), payload);
+        setEditingSetlistId(null);
+      } else {
+        await addDoc(collection(db, "bands", tenant.bandId, "setlists"), {
+          ...payload,
+          createdAt: serverTimestamp(),
+          createdBy: user.uid,
+        });
+      }
+
+      setSetlistModalOpen(false);
+      setSetlistModalName("");
+      setSetlistModalDate("");
       await fetchSetlists();
       setActiveTab("setlists");
     } catch (err) {
@@ -621,20 +686,29 @@ function App() {
     }
   };
 
-  const handleLoadSetlist = (songIds = []) => {
-    if (!Array.isArray(songIds) || songIds.length === 0) {
+  const handleRenameSetlist = (setlist) => {
+    setEditingSetlistId(setlist.id);
+    setSelectedSongs(Array.isArray(setlist.songIds) ? setlist.songIds : []);
+    setSetlistModalName(setlist.name || "");
+    setSetlistModalDate(setlist.performanceDate || "");
+    setSetlistModalOpen(true);
+  };
+
+  const handleEditSetlist = (setlist) => {
+    if (!Array.isArray(setlist.songIds) || setlist.songIds.length === 0) {
       alert("This setlist has no songs.");
       return;
     }
 
-    const availableSongIds = new Set(songs.map((song) => song.id));
-    const filteredSongIds = songIds.filter((id) => availableSongIds.has(id));
+    const availableSongIds = new Set(songs.map((s) => s.id));
+    const filteredSongIds = setlist.songIds.filter((id) => availableSongIds.has(id));
     if (filteredSongIds.length === 0) {
       alert("None of the songs in this setlist are currently available.");
       return;
     }
 
     setSelectedSongs(filteredSongIds);
+    setEditingSetlistId(setlist.id);
     setActiveTab("songs");
   };
 
@@ -784,22 +858,63 @@ function App() {
         {/* Selected Songs */}
         {selectedSongs.length > 0 && (
           <section className="mx-auto my-4 w-full max-w-4xl px-4">
-            <h2 className="mb-2 text-center text-sm font-medium text-text-primary">Selected Songs</h2>
-            <ul className="space-y-1.5">
-              {selectedSongs.map((id) => {
-                const song = songs.find((s) => s.id === id);
-                if (!song) return null;
-                return (
-                  <li key={id} className="flex items-center justify-between rounded-md border border-border bg-surface px-3 py-2">
-                    <div className="text-sm font-medium text-text-primary">{song.title} - {song.artist}</div>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => moveSongUp(id)}>Move Up</button>
-                      <button onClick={() => moveSongDown(id)}>Move Down</button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <h2 className="mb-2 text-center text-sm font-medium text-text-primary">
+              Selected Songs
+            </h2>
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="selected-songs">
+                {(provided) => (
+                  <ul
+                    className="space-y-1.5"
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                  >
+                    {selectedSongs.map((id, index) => {
+                      const song = songs.find((s) => s.id === id);
+                      if (!song) return null;
+                      return (
+                        <Draggable key={id} draggableId={id} index={index}>
+                          {(provided, snapshot) => (
+                            <li
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={`flex items-center gap-3 rounded-md border px-3 py-2 ${
+                                snapshot.isDragging
+                                  ? "border-accent bg-accent/10 shadow-lg"
+                                  : "border-border bg-surface"
+                              }`}
+                            >
+                              <span
+                                {...provided.dragHandleProps}
+                                className="cursor-grab text-text-secondary active:cursor-grabbing"
+                                title="Drag to reorder"
+                              >
+                                ⠿
+                              </span>
+                              <span className="flex-1 text-sm font-medium text-text-primary">
+                                {index + 1}. {song.title}
+                                <span className="ml-2 text-xs font-normal text-text-secondary">
+                                  {song.artist}
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectSong(id, false)}
+                                className="border-transparent text-text-secondary hover:text-danger"
+                                title="Remove from setlist"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          )}
+                        </Draggable>
+                      );
+                    })}
+                    {provided.placeholder}
+                  </ul>
+                )}
+              </Droppable>
+            </DragDropContext>
           </section>
         )}
 
@@ -931,20 +1046,37 @@ function App() {
                         ? setlist.createdAt.toDate().toLocaleDateString()
                         : "Unknown date";
                     const songCount = Array.isArray(setlist.songIds) ? setlist.songIds.length : 0;
+                    const isBeingEdited = editingSetlistId === setlist.id;
 
                     return (
                       <li
                         key={setlist.id}
-                        className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-base px-3 py-2"
+                        className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 ${
+                          isBeingEdited
+                            ? "border-accent bg-accent/10"
+                            : "border-border bg-base"
+                        }`}
                       >
                         <div className="min-w-[180px] flex-1">
-                          <p className="text-sm font-medium text-text-primary">{setlist.name || "Untitled setlist"}</p>
+                          <p className="text-sm font-medium text-text-primary">
+                            {setlist.name || "Untitled setlist"}
+                            {isBeingEdited && (
+                              <span className="ml-2 text-xs text-accent">editing</span>
+                            )}
+                          </p>
                           <p className="text-xs text-text-secondary">
-                            {songCount} song{songCount === 1 ? "" : "s"} • {createdLabel}
+                            {songCount} song{songCount === 1 ? "" : "s"}
+                            {setlist.performanceDate && (
+                              <> • {new Date(setlist.performanceDate + "T00:00:00").toLocaleDateString()}</>
+                            )}
+                            {" • "}{createdLabel}
                           </p>
                         </div>
-                        <button type="button" onClick={() => handleLoadSetlist(setlist.songIds || [])}>
-                          Load
+                        <button type="button" onClick={() => handleEditSetlist(setlist)}>
+                          {isBeingEdited ? "Reload" : "Edit"}
+                        </button>
+                        <button type="button" onClick={() => handleRenameSetlist(setlist)}>
+                          Rename
                         </button>
                         {userRole === "admin" && (
                           <button
@@ -981,6 +1113,21 @@ function App() {
             </div>
           </section>
         )}
+
+        <SetlistModal
+          open={setlistModalOpen}
+          name={setlistModalName}
+          date={setlistModalDate}
+          onNameChange={setSetlistModalName}
+          onDateChange={setSetlistModalDate}
+          onConfirm={handleConfirmSaveSetlist}
+          onCancel={() => {
+            setSetlistModalOpen(false);
+            setSetlistModalName("");
+            setSetlistModalDate("");
+            setEditingSetlistId(null);
+          }}
+        />
       </main>
     </div>
   );
