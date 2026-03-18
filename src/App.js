@@ -427,8 +427,12 @@ function App() {
           prev.map((s) => (s.id === editingSongId ? { id: editingSongId, ...newSong } : s))
         );
       } else {
-        const docRef = await addDoc(tenantSheetMusicCollectionRef(tenant), newSong);
-        setSongs((prev) => [...prev, { id: docRef.id, ...newSong }]);
+        const songPayload = {
+          ...newSong,
+          createdBy: user.uid,
+        };
+        const docRef = await addDoc(tenantSheetMusicCollectionRef(tenant), songPayload);
+        setSongs((prev) => [...prev, { id: docRef.id, ...songPayload }]);
       }
       setNewSong({ title: "", key: "", decade: "", artist: "", pdfUrl: "" });
       setUploadedFileName("");

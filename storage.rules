@@ -8,14 +8,19 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function roleForBand(bandId) {
+      return isSignedIn() && request.auth.token.bandRoles is map
+        ? request.auth.token.bandRoles[bandId]
+        : null;
+    }
+
     function isBandMember(bandId) {
-      return isSignedIn() &&
-        firestore.exists(/databases/(default)/documents/bands/$(bandId)/members/$(request.auth.uid));
+      let role = roleForBand(bandId);
+      return role == "member" || role == "admin";
     }
 
     function isBandAdmin(bandId) {
-      return isSignedIn() &&
-        firestore.get(/databases/(default)/documents/bands/$(bandId)/members/$(request.auth.uid)).data.role == "admin";
+      return roleForBand(bandId) == "admin";
     }
 
     function isValidPdf() {
@@ -25,9 +30,8 @@ service firebase.storage {
 
     // ── Sheet music PDFs: bands/{bandId}/sheet_music/{fileName} ───────────
     // Mirrors the bands/{bandId}/sheet_music Firestore collection.
-    // Any member can upload or replace a chart PDF.
-    // Only admins can delete, matching the Firestore-side admin-only delete
-    // on sheet_music documents.
+    // Members can read/write chart PDFs for their own band.
+    // Only admins can delete.
     match /bands/{bandId}/sheet_music/{fileName} {
       allow read:           if isBandMember(bandId);
       allow create, update: if isBandMember(bandId) && isValidPdf();
@@ -35,9 +39,8 @@ service firebase.storage {
     }
 
     // ── Generated playlist PDFs: bands/{bandId}/playlists/{fileName} ──────
-    // Exported/merged PDFs produced at runtime. Separate from sheet_music
-    // because these are ephemeral outputs, not source-of-truth chart files.
-    // Any member can write; only admins can delete.
+    // Members can read/write generated playlists for their own band.
+    // Only admins can delete.
     match /bands/{bandId}/playlists/{fileName} {
       allow read:           if isBandMember(bandId);
       allow create, update: if isBandMember(bandId) && isValidPdf();

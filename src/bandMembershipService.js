@@ -11,11 +11,16 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 
 const MAX_BANDS_PER_OWNER = 5;
 const MAX_BANDS_PER_USER = 5;
 const INVITE_EXPIRY_DAYS = 7;
+
+const refreshCurrentUserToken = async (uid) => {
+  if (auth.currentUser?.uid !== uid) return;
+  await auth.currentUser.getIdToken(true);
+};
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -81,6 +86,8 @@ export const createBandForUser = async ({ uid, bandName }) => {
   batch.set(doc(db, "users", uid), { lastActiveBandId: bandId }, { merge: true });
 
   await batch.commit();
+
+  await refreshCurrentUserToken(uid);
 
   return { bandId, role: "admin", bandName: cleanBandName };
 };
@@ -153,7 +160,7 @@ export const joinBandWithInvite = async ({ uid, token }) => {
     throw new Error("You can only belong to 5 bands.");
   }
 
-  return runTransaction(db, async (tx) => {
+  const result = await runTransaction(db, async (tx) => {
     // ── 1. Read and validate the invite ─────────────────────────────────
     const inviteRef = doc(db, "invites", normalizedToken);
     const inviteSnap = await tx.get(inviteRef);
@@ -220,4 +227,7 @@ export const joinBandWithInvite = async ({ uid, token }) => {
 
     return { bandId, role: "member", bandName };
   });
+
+  await refreshCurrentUserToken(uid);
+  return result;
 };

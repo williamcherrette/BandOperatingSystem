@@ -1,13 +1,9 @@
 import {
   collection,
-  collectionGroup,
   doc,
-  documentId,
   getDoc,
   getDocs,
-  query,
   setDoc,
-  where,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -41,26 +37,28 @@ const readUserBandsSubcollection = async (uid) => {
   return bands;
 };
 
-const deriveBandsFromMembership = async (uid) => {
+const deriveBandsFromMembership = async (uid, candidateBands = {}) => {
   const memberships = {};
-  const membershipsSnap = await getDocs(
-    query(collectionGroup(db, "members"), where(documentId(), "==", uid))
-  );
+  for (const [bandId, bandInfo] of Object.entries(candidateBands || {})) {
+    const memberSnap = await getDoc(doc(db, "bands", bandId, "members", uid));
+    if (!memberSnap.exists()) continue;
 
-  for (const memberDoc of membershipsSnap.docs) {
-    const bandId = memberDoc.ref.parent.parent?.id;
-    if (!bandId) continue;
-
-    const memberData = memberDoc.data();
+    const memberData = memberSnap.data();
     let bandName = "";
 
+    if (bandInfo?.bandName) {
+      bandName = bandInfo.bandName;
+    }
+
     try {
-      const bandSnap = await getDoc(doc(db, "bands", bandId));
-      if (bandSnap.exists()) {
-        bandName = bandSnap.data().name || "";
+      if (!bandName) {
+        const bandSnap = await getDoc(doc(db, "bands", bandId));
+        if (bandSnap.exists()) {
+          bandName = bandSnap.data().name || "";
+        }
       }
     } catch {
-      // Band root doc not readable (user not yet a member). Keep empty name.
+      // Keep cached name if the band root doc is temporarily unreadable.
     }
 
     memberships[bandId] = {
@@ -71,12 +69,47 @@ const deriveBandsFromMembership = async (uid) => {
     // Keep users/{uid}/bands/{bandId} in sync for fast future lookups.
     await setDoc(
       doc(db, "users", uid, "bands", bandId),
-      { role: memberData.role || "member", bandName },
+      {
+        role: memberData.role || "member",
+        bandName,
+      },
       { merge: true }
     );
   }
 
   return memberships;
+};
+
+const backfillOwnerMemberships = async (uid, cachedBands = {}, memberships = {}) => {
+  const updates = { ...memberships };
+
+  for (const [bandId, bandInfo] of Object.entries(cachedBands || {})) {
+    if (!bandInfo?.owned || updates[bandId]) continue;
+
+    try {
+      // Owner self-enrollment is allowed by rules when band.ownerId == uid.
+      await setDoc(
+        doc(db, "bands", bandId, "members", uid),
+        { role: "admin" },
+        { merge: true }
+      );
+
+      updates[bandId] = {
+        role: "admin",
+        bandName: bandInfo?.bandName || "",
+      };
+
+      await setDoc(
+        doc(db, "users", uid, "bands", bandId),
+        { role: "admin", bandName: bandInfo?.bandName || "", owned: true },
+        { merge: true }
+      );
+    } catch {
+      // Ignore bands that fail owner backfill checks.
+    }
+  }
+
+  return updates;
 };
 
 const pickActiveBand = (bandsMap, preferredBandId = null) => {
@@ -102,13 +135,20 @@ const pickActiveBand = (bandsMap, preferredBandId = null) => {
 
 export const resolveTenantContext = async (uid, seedUserData = null) => {
   let userData = seedUserData || (await readUserDocData(uid));
-  let bandsMap = hasBandsMap(userData)
+  const cachedBandsMap = hasBandsMap(userData)
     ? userData.bands
     : await readUserBandsSubcollection(uid);
 
-  if (Object.keys(bandsMap).length === 0) {
-    bandsMap = await deriveBandsFromMembership(uid);
+  const candidateBands = { ...cachedBandsMap };
+  if (userData?.lastActiveBandId && !candidateBands[userData.lastActiveBandId]) {
+    candidateBands[userData.lastActiveBandId] = {};
   }
+
+  // Membership docs are the security-rule authority for tenant access.
+  let bandsMap = await deriveBandsFromMembership(uid, candidateBands);
+  bandsMap = await backfillOwnerMemberships(uid, cachedBandsMap, bandsMap);
+
+  if (Object.keys(bandsMap).length === 0) bandsMap = {};
 
   const activeBand = pickActiveBand(bandsMap, userData?.lastActiveBandId || null);
 

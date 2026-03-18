@@ -31,6 +31,8 @@ jobs:
           REACT_APP_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.PROD_FIREBASE_MESSAGING_SENDER_ID }}
           REACT_APP_FIREBASE_APP_ID: ${{ secrets.PROD_FIREBASE_APP_ID }}
           REACT_APP_FIREBASE_MEASUREMENT_ID: ${{ secrets.PROD_FIREBASE_MEASUREMENT_ID }}
+          REACT_APP_RECAPTCHA_V3_SITE_KEY: ${{ secrets.PROD_RECAPTCHA_V3_SITE_KEY }}
+          REACT_APP_APPCHECK_DEBUG_TOKEN: ${{ secrets.PROD_APPCHECK_DEBUG_TOKEN }}
         run: npm run build
 
       - name: Install Functions dependencies
